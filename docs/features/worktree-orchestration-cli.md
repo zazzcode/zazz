@@ -14,7 +14,7 @@ At its core, the CLI exists to manage the chaos of out-of-order PR review and me
 - Next milestone: M1 CLI MVP
 - Services affected:
   - local Git repository and worktree container
-  - local `.zazz-wt/` state
+  - local `.zazz/` state
   - GitHub PR integration
   - remote integration branch state
   - local AI-assisted conflict workflows
@@ -38,7 +38,7 @@ The current implementation direction for this feature is:
 - Rust for the shared orchestration engine and the CLI application
 - system `git` invocation for branch, worktree, fetch, rebase, push, and cleanup operations
 - GitHub integration through a dedicated adapter layer, with optional `gh` interoperability where that reduces setup friction
-- repo-local state in `.zazz-wt/`
+- repo-local state in `.zazz/`
 - user-global product state in `~/.zazz/worktrees/`
 - machine-readable JSON output for agent-facing operations
 
@@ -64,7 +64,7 @@ Why this direction is preferred:
 flowchart LR
     U["Human or Agent"] --> CLI["Worktree CLI"]
     CLI --> GE["Git Interaction Engine"]
-    CLI --> DAG["Local .zazz-wt State"]
+    CLI --> DAG["Local .zazz State"]
     CLI --> GH["GitHub Adapter"]
     CLI --> AI["AI Conflict Services"]
     GE --> GIT["System Git"]
@@ -78,7 +78,7 @@ flowchart LR
 flowchart TD
     A["Run CLI doctor/init"] --> B{"Repo container ready?"}
     B -->|No| C["Guide bootstrap or adoption"]
-    B -->|Yes| D["Initialize .zazz-wt state"]
+    B -->|Yes| D["Initialize .zazz state"]
     C --> D
     D --> E["Create worktree node from parent branch"]
     E --> F["Materialize local-user files and settings"]
@@ -93,7 +93,7 @@ flowchart TD
 sequenceDiagram
     participant U as Human or Agent
     participant CLI as Worktree CLI
-    participant DAG as .zazz-wt State
+    participant DAG as .zazz State
     participant GIT as System Git
     participant FS as Filesystem
     participant LP as Local User Profile
@@ -114,7 +114,7 @@ sequenceDiagram
 sequenceDiagram
     participant CLI as Worktree CLI
     participant GIT as System Git
-    participant DAG as .zazz-wt State
+    participant DAG as .zazz State
     participant WT as Managed Worktrees
 
     CLI->>GIT: fetch remote integration branch
@@ -145,7 +145,7 @@ Current state today:
 What is not live yet:
 
 - no CLI commands
-- no local `.zazz-wt/` graph state
+- no local `.zazz/` graph state
 - no worktree bootstrap logic
 - no GitHub PR orchestration
 - no propagation engine
@@ -256,10 +256,15 @@ Conflict artifacts should live in repo-local orchestration state rather than onl
 
 The feature should separate:
 
-- repo-local orchestration state in `.zazz-wt/` for DAG metadata, worktree registry, conflict artifacts, and operation state tied to one repository
+- repo-local orchestration state in `.zazz/` for DAG metadata, worktree registry, conflict artifacts, and operation state tied to one repository
 - user-global state in `~/.zazz/` for machine-level preferences, provider credentials, caches, logs, reusable agent settings, and product-family configuration
 
-The DAG and per-repo conflict state should remain canonical inside `.zazz-wt/`.
+The DAG and per-repo conflict state should remain canonical inside `.zazz/`.
+
+The same product name is used in both places, but the scope is determined by location:
+
+- `.zazz/` inside the repo container is repo-local orchestration state
+- `~/.zazz/` in the user home directory is user-global Zazz family state
 
 Recommended user-global layout:
 
@@ -283,7 +288,7 @@ Recommended repo-local layout:
 ```text
 repo-container/
 ├── .bare/
-├── .zazz-wt/
+├── .zazz/
 │   ├── config.toml
 │   ├── graph.json
 │   ├── worktrees.json
@@ -318,7 +323,7 @@ AI and agents may implement, synchronize, and propose resolutions, but a human r
 
 1. Initialize or adopt a repo container.
 2. Create a worktree node from a chosen parent.
-3. Register it in `.zazz-wt/`.
+3. Register it in `.zazz/`.
 4. Open a draft PR against the parent branch.
 5. Continue downstream work in additional nodes.
 6. Detect upstream updates or merges.
@@ -360,6 +365,48 @@ This status view should include both:
 6. The agent resolves directly in the worktree or proposes a resolution.
 7. CLI reconciles the result and refreshes DAG state.
 
+## CLI Vocabulary and Surface Direction
+
+The public command should be `zazz`. The CLI should feel familiar to users who already know `git` and `gh`, while still exposing Zazz-specific graph and orchestration behavior clearly.
+
+Direction:
+
+- use `zazz` as the top-level command
+- make `zazz --help` the primary discoverability entry point for humans
+- keep the command families Git-like and verb-first where possible
+- prefer human-readable defaults with `--json` for agent consumption
+- make help and error output part of the contract, not an afterthought
+
+Milestone 1 should explicitly define these initial command families:
+
+- `zazz doctor`
+- `zazz init`
+- `zazz status`
+- `zazz worktree ...`
+- `zazz graph ...`
+- `zazz sync ...`
+- `zazz conflicts ...`
+- `zazz resolve ...`
+
+Illustrative command shape:
+
+```sh
+zazz --help
+zazz doctor
+zazz init
+zazz status
+zazz worktree create --from main rbac-mvp-auth-foundation
+zazz worktree create --from rbac-mvp-auth-foundation rbac-mvp-oauth
+zazz worktree list
+zazz graph inspect rbac-mvp-oauth
+zazz sync refresh --all
+zazz sync refresh rbac-mvp-oauth
+zazz conflicts show rbac-mvp-oauth
+zazz resolve rbac-mvp-oauth
+```
+
+The exact final command families may still evolve, but Milestone 1 should explicitly define the public CLI vocabulary rather than leaving it implicit in implementation.
+
 ## Milestone Overview
 
 | Milestone | Status | Outcome |
@@ -374,6 +421,7 @@ This status view should include both:
 Outcome criteria:
 
 - the local DAG/state model is clearly defined and initialized in a durable repo-local location
+- the public `zazz` command surface is defined clearly enough that `zazz --help` provides a stable entry point for both humans and agents
 - users can initialize or validate the required repo/worktree topology
 - a local integration worktree for `main` or `dev` is kept available as the stable origin-rooted creation source
 - users can create a new managed worktree that is actually usable immediately
@@ -395,9 +443,10 @@ M1 boundary:
 
 Initial capabilities in this milestone:
 
+- define the public `zazz` command vocabulary and help surface for the initial CLI
 - `doctor` or equivalent prerequisite/environment validation
 - repo-container bootstrap or adoption checks
-- local `.zazz-wt/` initialization
+- local `.zazz/` initialization
 - define and persist the initial local DAG structure and node/edge metadata model
 - facilitate the opinionated bare-repo plus sibling-worktree structure required by the project
 - maintain a local integration worktree for `main` or `dev` as a clean, runnable origin-rooted source
@@ -410,7 +459,7 @@ Initial capabilities in this milestone:
 - show whether each node is current relative to its parent and the configured integration base
 - inspect a node's parent/child relationships
 - automatically refresh affected worktrees when the configured remote integration branch advances
-- capture origin-refresh conflict artifacts in `.zazz-wt/` with enough detail for agent or human handoff
+- capture origin-refresh conflict artifacts in `.zazz/` with enough detail for agent or human handoff
 - return structured conflict status responses for agent consumption
 - support agent-assisted resolution for origin-refresh conflicts
 - remove or clean up a managed worktree safely
@@ -419,7 +468,7 @@ Initial capabilities in this milestone:
 Likely deliverables:
 
 - prerequisite detection and Git interaction wrapper
-- `.zazz-wt/` DAG structure, operational ancestry model, and local state bootstrap
+- `.zazz/` DAG structure, operational ancestry model, and local state bootstrap
 - repo-container and sibling-worktree bootstrap helpers
 - local integration-worktree management
 - local-user file sync profile and materialization logic
@@ -443,7 +492,7 @@ Focus:
 
 - prerequisite detection
 - repo-container adoption/bootstrap checks
-- `.zazz-wt/` structure
+- `.zazz/` structure
 - node, edge, and operational ancestry model
 
 Likely user-visible outcome:
@@ -519,7 +568,7 @@ Focus:
 
 - agent-driven conflict resolution workflow
 - CLI response contract for resolve attempts
-- reconcile-success and reconcile-failure updates back into `.zazz-wt/`
+- reconcile-success and reconcile-failure updates back into `.zazz/`
 
 Likely user-visible outcome:
 
@@ -566,9 +615,9 @@ Non-goals:
 - should propagation run only on clean working states, or can the CLI safely manage dirty worktrees?
 - how much AI context should be included by default during conflict resolution?
 - what should the final public command namespace be?
-- should intended work dependencies and current operational ancestry be stored as separate graph layers in `.zazz-wt/`, or derived from a single richer model?
+- should intended work dependencies and current operational ancestry be stored as separate graph layers in `.zazz/`, or derived from a single richer model?
 - should local-only files be copied, symlinked, or managed by a per-repo materialization strategy depending on file type?
-- what should the exact schema and naming convention be for saved conflict artifacts under `.zazz-wt/`?
+- what should the exact schema and naming convention be for saved conflict artifacts under `.zazz/`?
 
 ## Deliverable Handoff Considerations
 
@@ -585,7 +634,7 @@ Recommended first deliverable:
 
 Core M1 deliverables that should be called out explicitly:
 
-- local `.zazz-wt/` DAG/state structure design and bootstrap
+- local `.zazz/` DAG/state structure design and bootstrap
 - local integration-worktree convention and management
 - CLI worktree creation in the opinionated repo-container model
 - automatic copying or materialization of untracked local files into new worktrees
