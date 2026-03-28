@@ -1,0 +1,16 @@
+version: 1
+last_updated: 2026-03-28
+standards:
+  - id: repo-foundations
+    title: Repo Foundations
+    path: repo-foundations.md
+    status: active
+    summary: Initial project-wide guidance for architecture direction, workflow, and agent-facing interfaces.
+    applies_to:
+      paths:
+        - "**"
+      activities:
+        - planning
+        - implementation
+        - review
+        - documentation

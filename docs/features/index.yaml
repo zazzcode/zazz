@@ -1,0 +1,16 @@
+version: 1
+last_updated: 2026-03-28
+features:
+  - key: worktree-orchestration-cli
+    title: Worktree Orchestration CLI
+    status: proposed
+    file: worktree-orchestration-cli.md
+    domain: cli, git, worktrees, pr orchestration, agent workflows
+    current_milestone: M0 proposed
+    current_state: >
+      No implementation is live yet. The feature has been defined from the proposal
+      as the foundational CLI surface for local DAG state, worktree lifecycle,
+      PR management, propagation, and agent-friendly automation.
+    purpose: >
+      Defines the long-lived CLI capability for operating worktree graphs,
+      parent-relative PR workflows, and automated downstream propagation on one machine.
