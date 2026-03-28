@@ -379,7 +379,6 @@ Direction:
 
 Milestone 1 should explicitly define these initial command families:
 
-- `zazz doctor`
 - `zazz init`
 - `zazz status`
 - `zazz worktree ...`
@@ -392,11 +391,10 @@ Illustrative command shape:
 
 ```sh
 zazz --help
-zazz doctor
 zazz init
 zazz status
-zazz worktree create --from main rbac-mvp-auth-foundation
-zazz worktree create --from rbac-mvp-auth-foundation rbac-mvp-oauth
+zazz worktree add rbac-mvp-auth-foundation --from main
+zazz worktree add rbac-mvp-oauth --from rbac-mvp-auth-foundation
 zazz worktree list
 zazz graph inspect rbac-mvp-oauth
 zazz sync refresh --all
@@ -422,7 +420,7 @@ Outcome criteria:
 
 - the local DAG/state model is clearly defined and initialized in a durable repo-local location
 - the public `zazz` command surface is defined clearly enough that `zazz --help` provides a stable entry point for both humans and agents
-- users can initialize or validate the required repo/worktree topology
+- users can initialize the required repo/worktree topology, with readiness checks performed as part of `zazz init`
 - a local integration worktree for `main` or `dev` is kept available as the stable origin-rooted creation source
 - users can create a new managed worktree that is actually usable immediately
 - required local-only files and settings are materialized automatically
@@ -441,11 +439,34 @@ M1 boundary:
 - it should be valuable on its own for real day-to-day worktree usage
 - it should establish the full CLI MVP before the desktop application is pursued as a separate feature
 
+Proposed M1 command surface:
+
+- `zazz --help`: primary discoverability entry point for humans and the top-level summary of the CLI contract.
+- `zazz init`: perform prerequisite checks, validate or adopt the repo/container topology, initialize local `.zazz/` state, and ensure the local integration worktree convention is established.
+- `zazz status`: show repo-level Zazz health, managed-worktree summary, and whether the repo appears ready for normal CLI operations.
+- `zazz worktree add <name> --from <local-node-or-origin-base>`: create a new managed worktree from either a local managed node or the configured origin-rooted integration branch, materialize local-only files, and register the node in `.zazz/`.
+- `zazz worktree list`: list all managed worktrees for the repo with high-level freshness and readiness information.
+- `zazz worktree inspect <name>`: show detailed state for one managed worktree, including path, origin, intended parent, operational base, and current status.
+- `zazz worktree remove <name>`: safely remove a managed worktree and update local orchestration state when removal is allowed.
+- `zazz graph inspect <name>`: inspect the graph relationships around a worktree, including parent, children, and ancestry-related metadata.
+- `zazz sync refresh --all`: refresh all eligible managed worktrees in the repo against the configured remote integration branch.
+- `zazz sync refresh <name>`: refresh one managed worktree against the configured remote integration branch.
+- `zazz conflicts show <name>`: display the saved conflict artifact and recovery context for a worktree whose origin refresh failed.
+- `zazz resolve <name>`: run or resume the agent-assisted resolution flow for a worktree with a saved origin-refresh conflict.
+
+Command-shape notes:
+
+- `zazz init` should perform prerequisite and topology checks before making changes, rather than requiring a separate preflight-only command in M1
+- `zazz worktree add` is the main M1 creation command and should intentionally mirror `git worktree add` muscle memory as closely as the product's extra orchestration requirements allow
+- unlike raw Git, Zazz may derive the worktree path from the managed repo layout, so the primary positional argument should be the managed worktree name and the source branch or node should be expressed explicitly with `--from`
+- the M1 command surface is intentionally focused on local graph truth, worktree usability, origin refresh, and conflict recovery rather than PR lifecycle automation
+
+The exact flags may still evolve during spec work, but this command set should be treated as the working M1 CLI contract for planning purposes.
+
 Initial capabilities in this milestone:
 
 - define the public `zazz` command vocabulary and help surface for the initial CLI
-- `doctor` or equivalent prerequisite/environment validation
-- repo-container bootstrap or adoption checks
+- prerequisite and repo-container bootstrap/adoption checks performed by `zazz init`
 - local `.zazz/` initialization
 - define and persist the initial local DAG structure and node/edge metadata model
 - facilitate the opinionated bare-repo plus sibling-worktree structure required by the project
@@ -467,7 +488,7 @@ Initial capabilities in this milestone:
 
 Likely deliverables:
 
-- prerequisite detection and Git interaction wrapper
+- prerequisite detection inside `zazz init` and the Git interaction wrapper
 - `.zazz/` DAG structure, operational ancestry model, and local state bootstrap
 - repo-container and sibling-worktree bootstrap helpers
 - local integration-worktree management
@@ -490,7 +511,7 @@ These are feature-level slices, not full SPECs. They are intended to be small en
 
 Focus:
 
-- prerequisite detection
+- prerequisite detection inside `zazz init`
 - repo-container adoption/bootstrap checks
 - `.zazz/` structure
 - node, edge, and operational ancestry model
@@ -526,19 +547,7 @@ Likely user-visible outcome:
 
 - the user can see which worktrees are current, stale, blocked, or need refresh
 
-#### M1-D4: PR lifecycle through the CLI
-
-Focus:
-
-- GitHub auth/adapters
-- draft and ready-for-review PR creation
-- PR state mirroring into local graph state
-
-Likely user-visible outcome:
-
-- managed worktrees can become reviewable PR units directly from the CLI
-
-#### M1-D5: Automated refresh and rebase across local and remote changes
+#### M1-D4: Automated refresh and rebase across local and remote changes
 
 Focus:
 
@@ -549,7 +558,7 @@ Likely user-visible outcome:
 
 - all managed worktrees in a repo can be refreshed against the shared origin branch without manual branch-by-branch rebasing
 
-#### M1-D6: Conflict capture, persistence, and handoff
+#### M1-D5: Conflict capture, persistence, and handoff
 
 Focus:
 
@@ -562,7 +571,7 @@ Likely user-visible outcome:
 
 - failed refreshes produce durable conflict records that can be handed to another agent instead of being lost in terminal output
 
-#### M1-D7: Agent-assisted resolution for origin-refresh conflicts
+#### M1-D6: Agent-assisted resolution for origin-refresh conflicts
 
 Focus:
 
@@ -573,6 +582,18 @@ Focus:
 Likely user-visible outcome:
 
 - when an origin refresh conflicts, an agent can be pointed at the conflict artifact and worktree to attempt resolution in a controlled way
+
+#### M2-D1: PR lifecycle through the CLI
+
+Focus:
+
+- GitHub auth/adapters
+- draft and ready-for-review PR creation
+- PR state mirroring into local graph state
+
+Likely user-visible outcome:
+
+- managed worktrees can become reviewable PR units directly from the CLI
 
 ## Current State Summary
 
