@@ -1,6 +1,6 @@
 # Worktree-Native PR Orchestrator
 
-This repository is the starting point for a Zazz-managed product focused on worktree-native stacked and graph-based PR workflows for both humans and agents.
+This repository is the starting point for a product focused on worktree-native stacked and graph-based PR workflows for both humans and agents.
 
 The concept is to combine:
 
