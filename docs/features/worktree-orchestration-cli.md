@@ -11,6 +11,7 @@
 - [Core Concepts](#core-concepts)
 - [User Flows and System Flows](#user-flows-and-system-flows)
 - [CLI Vocabulary and Surface Direction](#cli-vocabulary-and-surface-direction)
+- [Capability Baseline (All Milestones)](#capability-baseline-all-milestones)
 - [Milestone Overview](#milestone-overview)
 - [Milestone Details](#milestone-details)
 - [Current State Summary](#current-state-summary)
@@ -194,6 +195,7 @@ This feature is successful when:
 - users can switch between multiple GitHub accounts and PAT-backed profiles without ad hoc shell reconfiguration
 - profile defaults can be associated to directory scopes so repo roots under a given path resolve to the intended identity by default
 - agents can execute a full human-equivalent contribution lifecycle in a worktree: commit, push, and create/update PRs with auditable state transitions
+- sandbox-safe non-interactive profile, auth, and directory-association flows are validated against Claude Code and Codex execution environments
 
 ## Core Concepts
 
@@ -363,6 +365,7 @@ Profile requirements:
   - a secure credential reference for PAT retrieval
 - profile selection should be explicit per command and optionally sticky per repo
 - the CLI should support directory-scoped default profile association so all repos under a configured path inherit a profile unless overridden
+- directory-profile association must be configurable through non-interactive commands so agents can manage it inside sandboxed execution environments without TTY prompts
 
 Directory association semantics:
 
@@ -373,6 +376,7 @@ Directory association semantics:
   3. best matching directory association
   4. global default profile
 - this model should mirror the intent of Git's conditional includes for directory scoping while preserving zazzles-specific profile semantics
+- this model must remain executable by agents that do not run in an interactive terminal session
 
 Credential storage and execution requirements:
 
@@ -440,6 +444,7 @@ This status view should include both:
 
 - worktrees that branch from other local managed nodes
 - worktrees that branch directly from the configured remote integration branch
+
 ### Account and profile selection flow
 
 1. User creates or updates one or more account profiles with owner defaults, Git identity defaults, and secure PAT references.
@@ -451,6 +456,10 @@ This status view should include both:
    - global default profile
 4. CLI retrieves credentials through secure user-global storage and applies them ephemerally for the command execution.
 5. CLI emits redaction-safe output and records enough metadata for troubleshooting without exposing PAT values.
+
+Agent execution requirement:
+
+- all profile and directory-association operations above must be available through non-interactive command contracts for sandboxed agents.
 
 ### Recovery flow
 
@@ -554,6 +563,26 @@ Important milestone note:
 - reading user-global config during `zaz init` is part of the bootstrap direction
 - editing user-global config through a first-class `zaz config` command is future work and should be planned as a later CLI milestone rather than added to the current `init-add-worktree` deliverable
 
+## Capability Baseline (All Milestones)
+
+Regardless of milestone sequencing, the feature requires these durable capability families:
+
+- Worktree orchestration:
+  - initialize repo topology and local orchestration state
+  - create, inspect, refresh, and clean up managed worktrees
+  - capture and recover from conflict states
+- Identity and auth management:
+  - support multiple GitHub account profiles and PAT-backed credentials
+  - support directory-scoped and repo-scoped profile defaults with deterministic precedence
+  - provide secure, non-interactive auth handoff for sandboxed agents
+- Contributor lifecycle operations:
+  - stage and commit worktree changes with profile-aware identity defaults
+  - push branch updates safely
+  - create and update PRs for managed worktrees
+- Agent-human parity:
+  - expose machine-readable output and auditable state transitions
+  - allow agents to perform the same operational actions a human contributor can perform
+
 ## Milestone Overview
 
 | Milestone | Status | Outcome |
@@ -599,28 +628,12 @@ M1 command and shape notes:
 - `zaz add` should stay Git-like in ergonomics while preserving zazzles-specific graph and naming behavior
 
 Initial capabilities in this milestone:
-
-- define the public `zaz` command vocabulary and help surface for the initial CLI
-- prerequisite checks and opinionated repo-root bootstrap performed by `zaz init <repo-name>`
-- local `.zazz/` initialization
-- define and persist the initial local DAG structure and node/edge metadata model
-- facilitate the opinionated bare-repo plus sibling-worktree structure required by the project
-- maintain a local integration worktree for the resolved integration branch as a clean, runnable origin-rooted source
-- create a worktree node from either a local parent node or the configured remote integration branch
-- generate or validate flat, meaningful worktree names
-- automatically convert the first branch in a stack from an unsuffixed name to a `-1` / `-2` lineage when the first child is created
-- automatically materialize untracked files into a newly created worktree based on the saved repo-local manifest
-- support a configurable integration branch and source worktree recorded in repo-local state
-- support verification that the new worktree is ready for actual development use
-- list worktree nodes and show graph status
-- show whether each node is current relative to its parent and the configured integration base
-- inspect a node's parent/child relationships
-- automatically refresh affected worktrees when the configured remote integration branch advances
-- capture origin-refresh conflict artifacts in `.zazz/` with enough detail for agent or human handoff
-- return structured conflict status responses for agent consumption
-- support agent-assisted resolution for origin-refresh conflicts
-- remove or clean up a managed worktree safely
-- structured CLI output for agent consumption, such as JSON status responses
+- establish `zaz` as a usable local orchestration surface for init/add/status/graph/refresh/conflict flows
+- bootstrap repo-local `.zazz/` state and managed repo-root topology safely
+- support worktree creation from local parent or integration-base source with ready-to-use materialization
+- maintain graph truth, freshness state, and conflict artifacts in machine-readable forms
+- support conflict recovery handoff and agent-assisted resolution for origin-refresh failures
+- expose structured command results for both human workflows and agent orchestration
 
 Suggested deliverable slices by milestone:
 
@@ -684,6 +697,7 @@ Outcome criteria:
 - both bare repo name and explicit owner/repo resolution paths are supported in the native provider adapter
 - users can configure, switch, and inspect multiple account profiles and directory associations from the CLI
 - agent execution can receive secure non-interactive auth context without relying on inherited shell environment variables
+- sandbox-safe authenticated flows are verified through repeatable test runs in both Claude Code and Codex-style agent environments
 
 #### M2-D1: Native GitHub provider parity for bootstrap and repo resolution
 Focus:
@@ -707,6 +721,7 @@ Focus:
 - explicit command path to hand off selected profile credentials to sandboxed agent execution
 - ephemeral credential materialization and cleanup
 - redaction-safe output and auditability
+- sandbox-safe validation matrix and regression tests covering Claude Code and Codex non-interactive execution paths
 Likely user-visible outcome:
 - Claude Code, Codex, and similar agents can execute authenticated GitHub flows reliably without ad hoc shell setup
 ### M3: Collaboration lifecycle and advanced maintenance flows
