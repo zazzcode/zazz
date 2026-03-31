@@ -37,7 +37,9 @@ The current implementation direction for this feature is:
 
 - Rust for the shared orchestration engine and the CLI application
 - system `git` invocation for branch, worktree, fetch, rebase, push, and cleanup operations
-- GitHub integration through a dedicated adapter layer, with optional `gh` interoperability where that reduces setup friction
+- GitHub integration through a dedicated adapter layer
+- M1 bootstrap behavior may use `gh` interoperability where that reduces setup friction
+- M2 should replace M1 `gh` runtime dependencies for repo resolution and auth checks with native Rust provider operations
 - repo-local state in `.zazz/`
 - user-global product state in `~/.zazz/worktrees/`
 - machine-readable JSON output for agent-facing operations
@@ -56,6 +58,12 @@ Why this direction is preferred:
 - calling system `git` in v1 is lower risk than re-implementing Git internals
 - a dedicated GitHub adapter keeps PR awareness explicit without making the CLI dependent on a hosted control plane
 - this keeps the CLI aligned with the proposal's broader Rust-first architecture while remaining practical to implement
+
+GitHub dependency transition note:
+
+- M1 may intentionally depend on the installed `gh` CLI for readiness and repo resolution checks.
+- M2 should remove that runtime dependency by implementing native GitHub host operations in the Rust CLI.
+- system `git` remains the source of truth for local branch/worktree mechanics across milestones.
 
 ## Feature Overview Diagrams
 
@@ -162,6 +170,7 @@ This feature is successful when:
 - AI-assisted conflict handling is available when propagation is not clean
 - the CLI remains the authoritative automation surface even after the desktop application ships
 - the CLI reliably handles out-of-order review and merge events without forcing humans to manually babysit the graph
+- core bootstrap and GitHub-host operations required by this feature can run without depending on the external `gh` binary once M2 is complete
 
 ## Core Concepts
 
@@ -317,6 +326,27 @@ repo-root/
 └── feature-worktree/
 ```
 
+### GitHub profile and credential scope
+
+The feature must support real-world multi-account and multi-organization usage where one developer may work across multiple GitHub identities and PATs.
+
+Profile requirements:
+
+- the CLI should support named GitHub auth profiles in user-global state (for example personal, work-org-a, work-org-b)
+- each profile should include at least:
+  - GitHub host
+  - account and owner defaults used for bare-name repo resolution
+  - Git author identity defaults (`user.name`, `user.email`) for repo/worktree operations
+  - a secure credential reference for PAT retrieval
+- profile selection should be explicit per command and optionally sticky per repo
+
+Credential storage and execution requirements:
+
+- PATs must not be written to repo-local `.zazz/` state
+- PATs should be stored in a secure user-global mechanism (for example OS keychain or encrypted user-global auth store)
+- the CLI should provide an explicit non-interactive auth handoff path for agents running in sandboxes that do not inherit the caller's shell environment
+- agent handoff should materialize credentials ephemerally for command execution, with redaction-safe logs and no plaintext persistence in repo-local files
+
 ### Graph-aware merge order
 
 The rule that creation order does not guarantee review or merge order. The CLI must follow actual dependency relationships and current merged state, not assume that lower-numbered or earlier-created nodes always complete first.
@@ -464,7 +494,8 @@ Important milestone note:
 | Milestone | Status | Outcome |
 | --- | --- | --- |
 | M1 | Proposed | CLI foundations for managed worktree creation, local DAG truth, origin refresh, conflict capture, and agent-assisted origin-refresh resolution |
-| M2 | Proposed | PR lifecycle automation plus parent-to-child propagation after upstream merge or update |
+| M2 | Proposed | Native GitHub provider operations in Rust plus multi-account profile and secure credential handling for human and agent execution |
+| M3 | Proposed | PR lifecycle automation, parent-to-child propagation, and advanced untracked-file maintenance workflows |
 
 ## Milestone Details
 
@@ -622,7 +653,59 @@ Likely user-visible outcome:
 
 - all managed worktrees in a repo can be refreshed against the shared origin branch without manual branch-by-branch rebasing
 
-#### M2-D3: Untracked file management and manifest maintenance
+### M2: Native GitHub operations and profile-aware auth
+
+Outcome criteria:
+
+- `zaz init` and related bootstrap checks can resolve repo identity and host readiness without requiring runtime `gh` commands
+- the CLI supports both bare repo name and explicit owner/repo resolution paths in the native provider adapter
+- users can configure and switch between multiple GitHub account profiles from the CLI
+- users can persist Git identity defaults per profile and apply them predictably during repo/worktree flows
+- PAT-backed auth can be retrieved for non-interactive agent execution without relying on pre-seeded shell environment variables
+- credential handling remains secure by default, with PAT values redacted from logs and excluded from repo-local state
+
+M2 boundary:
+
+- this milestone is about replacing M1 `gh` dependencies and hardening account/auth ergonomics
+- PR lifecycle automation remains out of scope until M3
+
+#### M2-D1: Native GitHub provider parity for bootstrap and repo resolution
+
+Focus:
+
+- replace `gh auth status` and `gh repo view` runtime dependencies with Rust-native provider operations
+- preserve typed failure categories and actionable remediation messages
+- keep repo-name and owner/repo resolution deterministic across profiles
+
+Likely user-visible outcome:
+
+- users can initialize repos without requiring the `gh` binary at runtime while preserving clear auth and repo-resolution errors
+
+#### M2-D2: Multi-account profiles, Git identity, and secure PAT storage
+
+Focus:
+
+- profile create/list/update/select commands in user-global state
+- per-profile Git identity defaults (`user.name`, `user.email`)
+- secure PAT storage and retrieval integration for profile-scoped auth
+
+Likely user-visible outcome:
+
+- users can switch between personal and organizational contexts without manual account/tool reconfiguration
+
+#### M2-D3: Agent auth handoff for non-interactive sandboxes
+
+Focus:
+
+- explicit command path to hand off selected profile credentials to sandboxed agent execution
+- ephemeral credential materialization and cleanup
+- redaction-safe output and auditability
+
+Likely user-visible outcome:
+
+- Claude Code, Codex, and similar agents can execute authenticated GitHub flows reliably without ad hoc shell setup
+
+#### M3-D3: Untracked file management and manifest maintenance
 
 Focus:
 
@@ -664,7 +747,7 @@ Likely user-visible outcome:
 
 - when an origin refresh conflicts, an agent can be pointed at the conflict artifact and worktree to attempt resolution in a controlled way
 
-#### M2-D1: PR lifecycle through the CLI
+#### M3-D1: PR lifecycle through the CLI
 
 Focus:
 
@@ -683,7 +766,8 @@ The feature is currently proposed only. No milestones have shipped yet.
 
 ## Planned Future Evolution
 
-- PR lifecycle automation should become the next milestone after origin-refresh and conflict-handoff behavior is stable
+- native GitHub operations and profile-aware auth should become the next milestone after origin-refresh and conflict-handoff behavior is stable
+- PR lifecycle automation should follow after native provider and profile capabilities are in place
 - parent-to-child propagation after local PR merge should land in a later milestone after origin-refresh behavior is stable
 - desktop visualization and review should build on top of this feature rather than replacing it
 - a later desktop/client milestone should support reviewing untracked files in the current worktree against the integration worktree and help the user accept selected updates back into that integration-worktree source of truth
@@ -722,6 +806,8 @@ Non-goals:
 - should untracked files be copied, symlinked, or managed by a per-repo materialization strategy depending on file type?
 - should untracked-file maintenance eventually gain a desktop/client diff-and-accept workflow against the integration worktree, and if so what should the acceptance/write-back UX look like?
 - what should the exact schema and naming convention be for saved conflict artifacts under `.zazz/`?
+- what secure storage abstraction should back profile PAT retrieval consistently across macOS, Linux, and Windows?
+- what should the profile-selection precedence be across global default, repo default, and per-command override?
 
 ## Deliverable Handoff Considerations
 
