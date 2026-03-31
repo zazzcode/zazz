@@ -1,10 +1,21 @@
 version: 1
-last_updated: 2026-03-30
+last_updated: 2026-03-31
 features:
   - key: worktree-orchestration-cli
     title: zazzles Worktree Orchestration CLI
     status: proposed
     file: worktree-orchestration-cli.md
+    companion_docs:
+      - worktree-orchestration-cli/README.md
+      - worktree-orchestration-cli/init.md
+      - worktree-orchestration-cli/adopt-existing-layout.md
+      - worktree-orchestration-cli/add.md
+      - worktree-orchestration-cli/status-and-list.md
+      - worktree-orchestration-cli/inspect-and-graph.md
+      - worktree-orchestration-cli/sync-and-refresh.md
+      - worktree-orchestration-cli/conflicts-and-resolve.md
+      - worktree-orchestration-cli/profiles-and-auth.md
+      - worktree-orchestration-cli/contribution-lifecycle.md
     domain: cli, git, worktrees, pr orchestration, agent workflows
     current_milestone: M0 proposed
     current_state: >

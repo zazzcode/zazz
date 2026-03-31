@@ -23,6 +23,59 @@ Product naming note:
 - the company/framework name remains Zazz / zazzcode where applicable
 - repo-local and user-global hidden state should continue to use `.zazz/` and `~/.zazz/`
 
+## Build and Run
+
+The CLI binary is named `zaz` and lives in `apps/cli`.
+
+Prerequisites for local use:
+
+- Rust toolchain with `cargo`
+- system `git`
+- GitHub CLI `gh`
+- for the current M1 `zaz init` flow, a working `gh auth status`
+
+Build the CLI:
+
+```sh
+cargo build -p zaz
+```
+
+Build the release binary:
+
+```sh
+cargo build --release -p zaz
+```
+
+Run the CLI directly through Cargo:
+
+```sh
+cargo run -p zaz -- --help
+```
+
+The built binaries are:
+
+- debug: `target/debug/zaz`
+- release: `target/release/zaz`
+
+Current M1 usage:
+
+```sh
+# initialize from the parent directory where the repo root should be created
+cargo run -p zaz -- init zazz-skills --integration main
+
+# after init, run add from inside the managed repo root
+cd zazz-skills
+cargo run -p zaz -- add smoke-test-1
+```
+
+Recommended verification:
+
+```sh
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
+
 ## Docs Layout
 
 ```text
