@@ -1,8 +1,28 @@
 # Feature: zazzles Worktree Orchestration CLI
+## Table of Contents
+- [Feature Summary](#feature-summary)
+- [Current Milestone / Next Milestone / Services Affected](#current-milestone--next-milestone--services-affected)
+- [Introduction](#introduction)
+- [Implementation Stack Direction](#implementation-stack-direction)
+- [Feature Overview Diagrams](#feature-overview-diagrams)
+- [Why This Feature Matters](#why-this-feature-matters)
+- [Current State](#current-state)
+- [Feature-Level Success Criteria](#feature-level-success-criteria)
+- [Core Concepts](#core-concepts)
+- [User Flows and System Flows](#user-flows-and-system-flows)
+- [CLI Vocabulary and Surface Direction](#cli-vocabulary-and-surface-direction)
+- [Milestone Overview](#milestone-overview)
+- [Milestone Details](#milestone-details)
+- [Current State Summary](#current-state-summary)
+- [Planned Future Evolution](#planned-future-evolution)
+- [Risks, Constraints, and Non-Goals](#risks-constraints-and-non-goals)
+- [Open Questions](#open-questions)
+- [Deliverable Handoff Considerations](#deliverable-handoff-considerations)
+- [References and Prior Art](#references-and-prior-art)
 
 ## Feature Summary
 
-The zazzles Worktree Orchestration CLI is the primary execution surface for managing local worktree graphs, parent-relative PR workflows, automated propagation, and agent-friendly orchestration on a single machine.
+The zazzles Worktree Orchestration CLI is the primary execution surface for managing local worktree graphs, contributor workflows (commit, push, PR), parent-relative PR workflows, automated propagation, and agent-friendly orchestration on a single machine.
 
 This feature exists so humans and agents can operate the product without depending on a desktop UI. It is the foundational user-facing capability that proves the product model before richer visualization and review experiences are layered on top.
 
@@ -171,6 +191,9 @@ This feature is successful when:
 - the CLI remains the authoritative automation surface even after the desktop application ships
 - the CLI reliably handles out-of-order review and merge events without forcing humans to manually babysit the graph
 - core bootstrap and GitHub-host operations required by this feature can run without depending on the external `gh` binary once M2 is complete
+- users can switch between multiple GitHub accounts and PAT-backed profiles without ad hoc shell reconfiguration
+- profile defaults can be associated to directory scopes so repo roots under a given path resolve to the intended identity by default
+- agents can execute a full human-equivalent contribution lifecycle in a worktree: commit, push, and create/update PRs with auditable state transitions
 
 ## Core Concepts
 
@@ -339,6 +362,17 @@ Profile requirements:
   - Git author identity defaults (`user.name`, `user.email`) for repo/worktree operations
   - a secure credential reference for PAT retrieval
 - profile selection should be explicit per command and optionally sticky per repo
+- the CLI should support directory-scoped default profile association so all repos under a configured path inherit a profile unless overridden
+
+Directory association semantics:
+
+- associations should support path-prefix matching, such as mapping `~/Dev/zazzcode/` to a specific profile
+- effective-profile precedence should be:
+  1. explicit command flag
+  2. repo-local pinned profile
+  3. best matching directory association
+  4. global default profile
+- this model should mirror the intent of Git's conditional includes for directory scoping while preserving zazzles-specific profile semantics
 
 Credential storage and execution requirements:
 
@@ -374,12 +408,14 @@ AI and agents may implement, synchronize, and propose resolutions, but a human r
 2. Create a worktree node from a chosen parent.
 3. If the operation turns an unsuffixed branch into a stacked lineage, rename the existing node to `-1`, create the new node as `-2`, and, when remote lifecycle management is active, push the renamed parent before deleting the old remote branch name.
 4. Register the resulting nodes in `.zazz/`.
-5. Open a draft PR against the parent branch.
-6. Continue downstream work in additional nodes.
-7. Detect upstream updates or merges.
-8. Propagate those changes downstream.
-9. Resolve conflicts with AI assistance or semantic migration when needed.
-10. Detect when the remote integration branch has advanced and refresh affected nodes as needed.
+5. Stage and commit worktree changes with repo/profile-aware author identity.
+6. Push branch updates using the active profile credentials.
+7. Open or update a draft PR against the parent branch.
+8. Continue downstream work in additional nodes.
+9. Detect upstream updates or merges.
+10. Propagate those changes downstream.
+11. Resolve conflicts with AI assistance or semantic migration when needed.
+12. Detect when the remote integration branch has advanced and refresh affected nodes as needed.
 
 Important flow nuance:
 
@@ -404,6 +440,17 @@ This status view should include both:
 
 - worktrees that branch from other local managed nodes
 - worktrees that branch directly from the configured remote integration branch
+### Account and profile selection flow
+
+1. User creates or updates one or more account profiles with owner defaults, Git identity defaults, and secure PAT references.
+2. User optionally associates one or more directory roots with a profile.
+3. When a command runs, the CLI resolves the effective profile using precedence:
+   - explicit command profile
+   - repo-local pinned profile
+   - best matching directory association
+   - global default profile
+4. CLI retrieves credentials through secure user-global storage and applies them ephemerally for the command execution.
+5. CLI emits redaction-safe output and records enough metadata for troubleshooting without exposing PAT values.
 
 ### Recovery flow
 
@@ -461,6 +508,9 @@ Milestone 1 should explicitly define these initial command families:
 Future CLI administration capability to add after the M1 bootstrap and worktree flows are stable:
 
 - `zaz config ...` for viewing and updating user-global defaults such as the default integration branch
+- `zaz account ...` for profile lifecycle and account switching
+- `zaz auth ...` for secure profile credential setup and validation
+- `zaz profile ...` for directory association and repo/profile binding operations
 
 Illustrative command shape:
 
@@ -483,6 +533,21 @@ zaz resolve auth-foundation-2
 In this example, the second `add` turns the original `auth-foundation` branch into `auth-foundation-1` and creates the new child as `auth-foundation-2`.
 
 The exact final command families may still evolve, but Milestone 1 should explicitly define the public CLI vocabulary rather than leaving it implicit in implementation.
+
+Planned M2 command families for native provider and account/auth operation:
+
+- `zaz account list`
+- `zaz account use <profile>`
+- `zaz auth login --profile <profile>`
+- `zaz auth status [--profile <profile>]`
+- `zaz profile set-dir <path> --account <profile>`
+- `zaz profile inspect --cwd`
+
+Planned M3 command families for human-equivalent contribution workflows:
+- `zaz commit --worktree <name> --message <msg>`
+- `zaz push <name>`
+- `zaz pr create <name>`
+- `zaz pr update <name>`
 
 Important milestone note:
 
@@ -525,36 +590,13 @@ M1 boundary:
 - it should be valuable on its own for real day-to-day worktree usage
 - it should establish the full CLI MVP before the desktop application is pursued as a separate feature
 
-Proposed M1 command surface:
+M1 command and shape notes:
 
-- `zaz --help`: primary discoverability entry point for humans and the top-level summary of the CLI contract.
-- `zaz init <repo-name> [--integration <branch>]`: run from the desired parent directory, resolve the named GitHub repo, create a new repo root directory with the same name, initialize `.bare/`, initialize local `.zazz/` state, and establish the resolved integration branch as the integration worktree.
-- `zaz status`: show repo-level zazzles health, managed-worktree summary, and whether the repo appears ready for normal CLI operations.
-- `zaz add <name> --from <local-node-or-origin-base>`: create a new managed worktree from either a local managed node or the configured origin-rooted integration branch, materialize untracked files, and register the node in `.zazz/`.
-- `zaz list`: list all managed worktrees for the repo with high-level freshness and readiness information.
-- `zaz inspect <name>`: show detailed state for one managed worktree, including path, origin, intended parent, operational base, and current status.
-- `zaz remove <name>`: safely remove a managed worktree and update local orchestration state when removal is allowed.
-- `zaz graph <name>`: inspect the graph relationships around a worktree, including parent, children, and ancestry-related metadata.
-- `zaz sync refresh --all`: refresh all eligible managed worktrees in the repo against the configured remote integration branch.
-- `zaz sync refresh <name>`: refresh one managed worktree against the configured remote integration branch.
-- `zaz conflicts show <name>`: display the saved conflict artifact and recovery context for a worktree whose origin refresh failed.
-- `zaz resolve <name>`: run or resume the agent-assisted resolution flow for a worktree with a saved origin-refresh conflict.
-
-Command-shape notes:
-
-- `zaz init` should perform prerequisite and topology checks before making changes, rather than requiring a separate preflight-only command in M1
-- the first positional argument for `zaz init` should be the repo name, and the created directory must use that same name with no separate directory override in M1
-- `zaz init` should accept `--integration <branch>` with `-i` as the short flag
-- integration branch resolution order should be: explicit flag, user-global config default, fallback `main`
-- the user-global config file for this default should be `~/.zazz/config.toml` with top-level `integration_branch`
-- M1 `zaz init` should support fresh bootstrap only; adopting or converting an already-existing local repo layout is out of scope
-- `zaz add` is the main M1 creation command and should intentionally mirror `git worktree add` muscle memory as closely as the product's extra orchestration requirements allow, while keeping worktrees implicit in the product vocabulary
-- unlike raw Git, zazzles may derive the worktree path from the managed repo layout, so the primary positional argument should be the managed worktree name and the source branch or node should be expressed explicitly with `--from`
-- when `zaz add` turns a previously unsuffixed branch into the start of a stack, the CLI should rename that existing branch/worktree to `-1` and assign the new child the next suffix automatically
-- remote branch reconciliation for already-pushed parents should use the same naming rule once the GitHub-aware lifecycle milestone is active: push the renamed parent first, verify the new remote ref, then remove the old remote branch name
-- the M1 command surface is intentionally focused on local graph truth, worktree usability, origin refresh, and conflict recovery rather than PR lifecycle automation
-
-The exact flags may still evolve during spec work, but this command set should be treated as the working M1 CLI contract for planning purposes.
+- the canonical command vocabulary and examples for M1 are defined in `CLI Vocabulary and Surface Direction` and should be treated as the source of truth for this feature document
+- `zaz init` should perform prerequisite and topology checks before making changes (no separate preflight-only command in M1)
+- `zaz init <repo-name> [--integration <branch>]` remains repo-name-first with integration resolution order `flag -> global config -> main`
+- M1 `zaz init` remains fresh-bootstrap only
+- `zaz add` should stay Git-like in ergonomics while preserving zazzles-specific graph and naming behavior
 
 Initial capabilities in this milestone:
 
@@ -580,185 +622,128 @@ Initial capabilities in this milestone:
 - remove or clean up a managed worktree safely
 - structured CLI output for agent consumption, such as JSON status responses
 
-Likely deliverables:
-
-- prerequisite detection inside `zaz init` and the Git interaction wrapper
-- `.zazz/` DAG structure, operational ancestry model, and local state bootstrap
-- repo-root and sibling-worktree bootstrap helpers
-- local integration-worktree management
-- untracked-files manifest and materialization logic
-- worktree create/list/status/cleanup commands
-- local branch/worktree rename handling for first-stack creation
-- readiness verification for newly created worktrees
-- graph inspection and JSON output contract
-- integration-base freshness tracking in graph/status output
-- remote-base refresh engine
-- remote integration-branch drift detection
-- conflict artifact capture and storage
-- agent-facing conflict status contract
-- agent-assisted resolution flow for origin-refresh conflicts
-
-Suggested M1 deliverable slices
+Suggested deliverable slices by milestone:
 
 These are feature-level slices, not full SPECs. They are intended to be small enough that a human plus agent could plausibly complete each one in roughly a 12-hour implementation window, excluding later SPEC authoring time.
 
 #### M1-D1: Local DAG/state bootstrap and repo-root validation
-
 Focus:
-
 - prerequisite detection inside `zaz init`
 - repo-root bootstrap checks
 - `.zazz/` structure
 - node, edge, and operational ancestry model
-
 Likely user-visible outcome:
-
 - the CLI can tell whether a repo is ready and initialize trustworthy local orchestration state
 
 #### M1-D2: Managed worktree creation and untracked-file materialization
-
 Focus:
-
 - create from local parent or remote integration base
 - opinionated sibling-worktree layout
 - local integration-worktree convention
 - untracked-file materialization
 - readiness verification
-
 Likely user-visible outcome:
-
 - a new worktree can be created and used immediately without manual copying of untracked files
 
 #### M1-D3: Worktree list/status and freshness inspection
-
 Focus:
-
-- list/status commands
+- list and status commands
 - parent/child relationship inspection
 - freshness signals relative to parent and integration base
 - JSON output for agent consumption
-
 Likely user-visible outcome:
-
-- the user can see which worktrees are current, stale, blocked, or need refresh
+- users can see which worktrees are current, stale, blocked, or need refresh
 
 #### M1-D4: Automated refresh and rebase across local and remote changes
-
 Focus:
-
 - remote integration-base refresh
 - refresh ordering against the configured integration branch
-
 Likely user-visible outcome:
-
 - all managed worktrees in a repo can be refreshed against the shared origin branch without manual branch-by-branch rebasing
 
-### M2: Native GitHub operations and profile-aware auth
-
-Outcome criteria:
-
-- `zaz init` and related bootstrap checks can resolve repo identity and host readiness without requiring runtime `gh` commands
-- the CLI supports both bare repo name and explicit owner/repo resolution paths in the native provider adapter
-- users can configure and switch between multiple GitHub account profiles from the CLI
-- users can persist Git identity defaults per profile and apply them predictably during repo/worktree flows
-- PAT-backed auth can be retrieved for non-interactive agent execution without relying on pre-seeded shell environment variables
-- credential handling remains secure by default, with PAT values redacted from logs and excluded from repo-local state
-
-M2 boundary:
-
-- this milestone is about replacing M1 `gh` dependencies and hardening account/auth ergonomics
-- PR lifecycle automation remains out of scope until M3
-
-#### M2-D1: Native GitHub provider parity for bootstrap and repo resolution
-
-Focus:
-
-- replace `gh auth status` and `gh repo view` runtime dependencies with Rust-native provider operations
-- preserve typed failure categories and actionable remediation messages
-- keep repo-name and owner/repo resolution deterministic across profiles
-
-Likely user-visible outcome:
-
-- users can initialize repos without requiring the `gh` binary at runtime while preserving clear auth and repo-resolution errors
-
-#### M2-D2: Multi-account profiles, Git identity, and secure PAT storage
-
-Focus:
-
-- profile create/list/update/select commands in user-global state
-- per-profile Git identity defaults (`user.name`, `user.email`)
-- secure PAT storage and retrieval integration for profile-scoped auth
-
-Likely user-visible outcome:
-
-- users can switch between personal and organizational contexts without manual account/tool reconfiguration
-
-#### M2-D3: Agent auth handoff for non-interactive sandboxes
-
-Focus:
-
-- explicit command path to hand off selected profile credentials to sandboxed agent execution
-- ephemeral credential materialization and cleanup
-- redaction-safe output and auditability
-
-Likely user-visible outcome:
-
-- Claude Code, Codex, and similar agents can execute authenticated GitHub flows reliably without ad hoc shell setup
-
-#### M3-D3: Untracked file management and manifest maintenance
-
-Focus:
-
-- inspect the saved untracked-files manifest
-- add or remove entries through CLI commands
-- refresh the manifest from the current integration worktree when the user wants to rescan
-- evaluate safe copy-back or sync-to-integration flows for selected untracked files
-
-Likely user-visible outcome:
-
-- the user can evolve which untracked files are propagated to future worktrees without hand-editing `.zazz/untracked-files.json`
-
-Important policy note:
-
-- copy-back or bidirectional untracked-file sync should remain future work until overwrite, timestamp, directory, and conflict policy are explicitly specified
-
 #### M1-D5: Conflict capture, persistence, and handoff
-
 Focus:
-
 - conflict classification
 - repo-local conflict artifact storage
 - machine-readable conflict output
 - handoff contract for a human or agent resolver
-
 Likely user-visible outcome:
-
 - failed refreshes produce durable conflict records that can be handed to another agent instead of being lost in terminal output
 
 #### M1-D6: Agent-assisted resolution for origin-refresh conflicts
-
 Focus:
-
 - agent-driven conflict resolution workflow
 - CLI response contract for resolve attempts
 - reconcile-success and reconcile-failure updates back into `.zazz/`
-
 Likely user-visible outcome:
-
 - when an origin refresh conflicts, an agent can be pointed at the conflict artifact and worktree to attempt resolution in a controlled way
+### M2: Native GitHub operations and profile-aware auth
+
+Outcome criteria:
+- `zaz init` and related bootstrap checks can resolve repo identity and host readiness without requiring runtime `gh` commands
+- both bare repo name and explicit owner/repo resolution paths are supported in the native provider adapter
+- users can configure, switch, and inspect multiple account profiles and directory associations from the CLI
+- agent execution can receive secure non-interactive auth context without relying on inherited shell environment variables
+
+#### M2-D1: Native GitHub provider parity for bootstrap and repo resolution
+Focus:
+- replace `gh auth status` and `gh repo view` runtime dependencies with Rust-native provider operations
+- preserve typed failure categories and actionable remediation messages
+- keep repo-name and owner/repo resolution deterministic across profiles
+Likely user-visible outcome:
+- users can initialize repos without requiring the `gh` binary at runtime while preserving clear auth and repo-resolution errors
+
+#### M2-D2: Multi-account profiles, Git identity, and secure PAT storage
+Focus:
+- profile create/list/update/select commands in user-global state
+- per-profile Git identity defaults (`user.name`, `user.email`)
+- secure PAT storage and retrieval integration for profile-scoped auth
+- repo-level and directory-level profile association
+Likely user-visible outcome:
+- users can switch between personal and organizational contexts without manual account and tool reconfiguration
+
+#### M2-D3: Agent auth handoff for non-interactive sandboxes
+Focus:
+- explicit command path to hand off selected profile credentials to sandboxed agent execution
+- ephemeral credential materialization and cleanup
+- redaction-safe output and auditability
+Likely user-visible outcome:
+- Claude Code, Codex, and similar agents can execute authenticated GitHub flows reliably without ad hoc shell setup
+### M3: Collaboration lifecycle and advanced maintenance flows
+
+Outcome criteria:
+- agents can run human-equivalent contribution actions in worktrees (commit, push, PR create/update) with profile-aware identity control
+- parent-child propagation and merge-order resilience are automated and observable
+- untracked-file manifest maintenance is first-class and auditable
 
 #### M3-D1: PR lifecycle through the CLI
-
 Focus:
-
-- GitHub auth/adapters
+- stage and commit worktree changes with explicit identity/profile control
+- push branch updates with deterministic remote/ref behavior
 - draft and ready-for-review PR creation
 - PR state mirroring into local graph state
 - remote branch rename reconciliation when a pushed parent is converted into a numbered stack lineage, including push-first verification before old-name cleanup
-
 Likely user-visible outcome:
+- managed worktrees can move from local changes to committed branch updates to reviewable PR units directly from the CLI, including already-pushed parent rename cases
 
-- managed worktrees can become reviewable PR units directly from the CLI, including cases where the CLI must rename an already-pushed parent branch to `-1`, push that renamed branch, verify it on GitHub, and only then clean up the old remote name before continuing the stack
+#### M3-D2: Parent-child propagation and merge-order resilience
+Focus:
+- automated downstream propagation after upstream merges or updates
+- robust handling of out-of-order merge completion
+- clear status and conflict transitions for propagation runs
+Likely user-visible outcome:
+- downstream branches stay convergent with less manual rebase and recovery work even when review order is non-linear
+
+#### M3-D3: Untracked file management and manifest maintenance
+Focus:
+- inspect the saved untracked-files manifest
+- add or remove entries through CLI commands
+- refresh the manifest from the current integration worktree when the user wants to rescan
+- evaluate safe copy-back or sync-to-integration flows for selected untracked files
+Likely user-visible outcome:
+- the user can evolve which untracked files are propagated to future worktrees without hand-editing `.zazz/untracked-files.json`
+Important policy note:
+- copy-back or bidirectional untracked-file sync should remain future work until overwrite, timestamp, directory, and conflict policy are explicitly specified
 
 ## Current State Summary
 
@@ -831,3 +816,15 @@ Core M1 deliverables that should be called out explicitly:
 - repo-local conflict artifact capture for failed origin refreshes
 
 The desktop application should be specified as a separate feature that depends on this feature's core workflows rather than replacing them.
+
+## References and Prior Art
+
+- Git conditional includes (`includeIf "gitdir:..."`) for directory-scoped config behavior:
+  - <https://git-scm.com/docs/git-config#_conditional_includes>
+- Git credential context and helper model:
+  - <https://git-scm.com/docs/gitcredentials>
+- Git credential helper command contract:
+  - <https://git-scm.com/docs/git-credential>
+- GitHub CLI authentication behavior and host/account management:
+  - <https://cli.github.com/manual/gh_auth_login>
+  - <https://cli.github.com/manual/gh_auth_status>
