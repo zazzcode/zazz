@@ -1,4 +1,39 @@
-# Proposal: Worktree-Native PR Orchestration for Humans and Agents
+# Proposal: zazzles Worktree-Native PR Orchestration for Humans and Agents
+
+## Table of Contents
+
+- [Status](#status)
+- [Scope](#scope)
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Core Workflow to Enable](#core-workflow-to-enable)
+- [Solution Overview Diagrams](#solution-overview-diagrams)
+- [Source Material](#source-material)
+- [Scope and Non-Goals](#scope-and-non-goals)
+- [Business Justification](#business-justification)
+- [Technical Justification](#technical-justification)
+- [Value Proposition and Expected Outcomes](#value-proposition-and-expected-outcomes)
+- [Why Not Just Use Worktrunk or GitButler for This Use Case](#why-not-just-use-worktrunk-or-gitbutler-for-this-use-case)
+- [Deeper Value Evaluation of Worktrunk, GitButler, and Zazzles](#deeper-value-evaluation-of-worktrunk-gitbutler-and-zazzles)
+- [Feature Opportunities Informed by Worktrunk and GitButler](#feature-opportunities-informed-by-worktrunk-and-gitbutler)
+- [Market Context and Comparison](#market-context-and-comparison)
+- [Competitive Positioning Summary](#competitive-positioning-summary)
+- [Tradeoff Analysis](#tradeoff-analysis)
+- [Standards and Constraints Analysis](#standards-and-constraints-analysis)
+- [Opinionated Worktree Topology](#opinionated-worktree-topology)
+- [Risks and Mitigations](#risks-and-mitigations)
+- [Dependencies and Sequencing Considerations](#dependencies-and-sequencing-considerations)
+- [Preliminary Product Architecture](#preliminary-product-architecture)
+- [Preliminary Feature Breakdown](#preliminary-feature-breakdown)
+- [Product Prerequisites and External Dependencies](#product-prerequisites-and-external-dependencies)
+- [Recommended MVP and Implementation Plan](#recommended-mvp-and-implementation-plan)
+- [UI Recommendation for Conflict Resolution](#ui-recommendation-for-conflict-resolution)
+- [Detailed DAG Propagation Diagram](#detailed-dag-propagation-diagram)
+- [Technology Recommendation](#technology-recommendation)
+- [Recommendation](#recommendation)
+- [Decision Checklist](#decision-checklist)
+- [Open Questions](#open-questions)
+- [Discussion Log / Notable Arguments](#discussion-log--notable-arguments)
+- [Sign-off Outcome and Next-Phase Handoff](#sign-off-outcome-and-next-phase-handoff)
 
 ## Status
 
@@ -40,7 +75,10 @@ Without orchestration, this creates a painful failure mode:
 - PR feedback on an earlier branch becomes expensive rebase work or ad hoc reimplementation in every later branch
 - reviewers and owners lose clarity about which worktrees are blocked, stale, or ready
 
-This product idea starts from a simple but important observation: Git worktrees already provide the filesystem isolation that agentic development wants, while GitButler has already proven the value of a polished stacked-branch workflow. The opportunity here is to build a GitButler-inspired solution that keeps the parts that are compelling about ordered stacked PRs, but makes the execution model explicitly worktree-native, agent-friendly, and team-aware.
+This product idea starts from a simple but important observation: Git worktrees already provide the filesystem isolation that agentic development wants, while emerging tools such as Worktrunk and GitButler validate adjacent parts of the opportunity from different angles.
+
+- Worktrunk shows that there is real demand for a CLI-first, worktree-native workflow that makes parallel AI-agent work more practical on top of ordinary Git.
+- GitButler shows that there is real demand for friendlier stacked and parallel branch workflows, but it does so through a model centered on one working directory with virtual and stacked branches applied inside that workspace.
 
 The opportunity is to build a worktree-native orchestration layer that makes stacked and graph-shaped branch workflows practical for both humans and agents. The desired outcome is:
 
@@ -58,6 +96,14 @@ The opportunity is to build a worktree-native orchestration layer that makes sta
 - AI-assisted conflict handling and semantic migration for the file conflicts that propagation inevitably creates
 
 The core product problem is not "how do we invent virtual branches again." The core product problem is "how do we manage branch dependency metadata, PR lifecycle, rebases, migrations, and review ergonomics on top of standard Git primitives."
+
+Product naming direction:
+
+- the product name is `zazzles`
+- the public CLI command is expected to be `zaz`
+- the core `zaz` lifecycle commands should use concise top-level verbs such as `zaz add` and `zaz list` rather than repeating `worktree` in every command
+- hidden repo-local and user-global state should remain `.zazz/` and `~/.zazz/` for compatibility with the broader Zazz / zazzcode ecosystem
+- repo-container bootstrap should be opinionated: `zaz init <repo-name>` should create a container directory whose name matches the repo name rather than allowing a separate directory name
 
 ## Core Workflow to Enable
 
@@ -241,8 +287,8 @@ This proposal synthesizes:
 - the shared March 26, 2026 brain-dump conversation captured in the Claude share URL provided for this project
 - the Zazz framework and worktree guidance from the sibling `zazz-skills` repo
 - the `qb-mono` worktree setup instructions you referenced as an example of the desired bare-repo plus sibling-worktree operating model
+- official product and platform documentation for Git worktrees, [Worktrunk](https://github.com/max-sixty/worktrunk), [GitButler](https://docs.gitbutler.com/overview), Graphite, and Sapling for competitor and adjacent-workflow analysis
 - GitButler's stacked-change workflow as a key source of product inspiration, especially for branch sequencing and review ergonomics
-- official product and platform documentation for Git worktrees, GitButler, Graphite, and Sapling for competitor and adjacent-workflow analysis
 
 ## Scope and Non-Goals
 
@@ -330,9 +376,15 @@ Expected outcomes:
 - more realistic execution because branch size and review speed do not have to match graph position
 - less manual graph auditing because the system can report which worktrees now need refresh after team-originated base-branch changes
 
-## Why Not Just Use GitButler for This Use Case
+## Why Not Just Use Worktrunk or GitButler for This Use Case
 
-GitButler is the clearest inspiration point for this proposal, and that should be called out directly. It is already a serious answer for users who want a polished stacked-change workflow in one working directory.
+The two clearest comparison points are Worktrunk and GitButler, but they validate different slices of the problem.
+
+Worktrunk is a serious and very relevant comparison because it is explicitly a CLI for Git worktree management designed for running AI agents in parallel. Its docs show a configurable worktree-path model rather than one fixed repo layout, and it layers [hooks](https://worktrunk.dev/hook/), [merge helpers](https://worktrunk.dev/merge/), [interactive switching](https://worktrunk.dev/switch/), [ignored-file and cache copying](https://worktrunk.dev/step/), [PR checkout shortcuts](https://worktrunk.dev/switch/), [CI and summary views](https://worktrunk.dev/tips-patterns/), and [deterministic per-worktree dev-server patterns](https://worktrunk.dev/tips-patterns/) on top of standard Git.
+
+GitButler is a serious product and likely the better choice for a solo human who wants a smoother stacked-branch workflow inside one working directory. Its own docs frame the product around the working directory, multiple applied branches, parallel virtual branches, and stacked branch management inside that workspace, with local PR-stack orchestration and strong commit-shaping ergonomics.
+
+GitButler is also the clearest inspiration point for the proposal's stacked-review ergonomics, and that should be called out directly. It is already a serious answer for users who want a polished stacked-change workflow in one working directory.
 
 This proposal is stronger for a different use case:
 
@@ -351,16 +403,153 @@ Why this proposal is a better fit for that use case:
 - the product is explicitly designed to refresh against a shared team integration branch while respecting actively edited worktrees
 - the product keeps human review checkpoints explicit by making each branch a reviewable PR unit
 
+Why Worktrunk is highly relevant but still not the whole proposal:
+
+- it is very close to our CLI-first, real-worktree execution model
+- it proves that "parallel AI agents with git worktrees" is a real workflow, not just a theoretical niche
+- its documented strengths are local worktree lifecycle, shell integration, hooks, merge helpers, cache and ignored-file reuse, PR checkout, per-worktree local service patterns, CI visibility, and LLM-assisted commit/summarization quality-of-life improvements
+- its docs appear centered on local worktree operations and per-project configuration, not on first-class multi-account profile orchestration for engineers switching between many Git identities
+- it appears to stop short of the full product layer this proposal is centered on: dependency-graph metadata, parent-relative PR lifecycle, downstream propagation into already-open worktrees and PRs, and graph-wide refresh against integration-branch drift
+
 Why GitButler may be a worse fit for this use case:
 
 - its main strength is reducing friction for one user inside one workspace
 - that same model is less natural for many agents working truly simultaneously
+- its own documentation emphasizes virtual and stacked branches coexisting in one working directory, which is a different isolation model from one real branch and one real filesystem per active unit of work
 - it does not appear to be optimized around automatic propagation across isolated downstream worktrees that may already have their own PRs open
 
 Honest downside of this proposal:
 
-- this approach is more operationally complex than GitButler
+- this approach is more operationally complex than either Worktrunk or GitButler
 - it will only be worth it if the isolation and propagation benefits are important enough to justify that extra complexity
+
+## Deeper Value Evaluation of Worktrunk, GitButler, and Zazzles
+
+The comparison should be honest and concrete enough that a developer can decide which tool is right for their workflow.
+
+### What Worktrunk already does well
+
+Worktrunk appears strongest when the user's main problem is "make real Git worktrees operationally pleasant enough that I can run many agent or human tasks in parallel."
+
+That value is meaningful because it already combines several practical accelerators around the worktree lifecycle:
+
+- lifecycle hooks for create, switch, merge, and remove events
+- LLM-generated commit messages and branch summaries
+- a one-command local merge pipeline that can squash, rebase, fast-forward, and clean up
+- an interactive picker with live previews
+- ignored-file and build-cache copying to avoid cold starts
+- `wt list --full` status views with CI and summary information
+- PR checkout shortcuts such as `wt switch pr:123`
+- deterministic dev-server port patterns per worktree
+
+Taken together, this means Worktrunk is already an opinionated worktree operations layer with strong AI-agent ergonomics, even before any deeper PR-graph orchestration is added.
+
+### What GitButler already does well
+
+GitButler appears strongest when the user's main problem is "I want stacked and parallel branch workflows to feel fluid inside one workspace, with strong commit shaping and review ergonomics."
+
+That value is meaningful because GitButler already offers:
+
+- simultaneous work on multiple applied branches in one working directory
+- lane-based change assignment and commit shaping
+- parallel and stacked branch support inside the same client model
+- local stacked-PR orchestration with parent-targeted PRs
+- upstream reconciliation flows for rebasing and removing integrated work
+- a polished desktop-first user experience for branch manipulation and review preparation
+
+Taken together, GitButler is already a serious answer to stacked and parallel branch management for humans who want powerful local branch composition inside one workspace.
+
+### Why a developer would still choose Zazzles
+
+A developer should choose Zazzles over Worktrunk or GitButler only if they specifically value the following combination more than the simpler alternatives:
+
+- one real branch and one real filesystem per active unit of work
+- explicit dependency-graph metadata rather than only branch or worktree lists
+- downstream propagation as a first-class responsibility, not just a merge helper
+- review-aware orchestration across already-open downstream PRs
+- clearer fit for one human coordinating multiple agents rather than only one human managing their own local branch workflow
+- graph-wide refresh against remote integration drift as an explicit workflow
+- profile- and directory-aware identity handling for users who work across multiple GitHub accounts or client environments
+- escalation from ordinary Git conflict handling into AI-assisted resolution and, when needed, semantic migration onto a fresh worktree
+
+In plain language:
+
+- choose Worktrunk when the biggest pain is local worktree friction
+- choose GitButler when the biggest pain is stacked or parallel branch UX inside one workspace
+- choose Zazzles when the biggest pain is coordinating many isolated worktrees, dependent PRs, and downstream propagation under real human review latency
+
+That is the real value test. If Zazzles does not make that multi-agent propagation and review problem materially easier than the other two, it should not exist.
+
+### Why the primary Zazzles user journey points to Zazzles
+
+The proposal should be explicit that Zazzles is not aiming at every Git user. It may eventually support multiple user journeys, but it needs one primary journey where it is clearly better than adjacent tools:
+
+1. a human owner initializes a repo container and keeps one clean integration worktree
+2. they create one isolated worktree per active unit of work
+3. one or more agents work in those isolated worktrees in parallel
+4. each important branch becomes a human review checkpoint through a parent-relative PR
+5. while one PR waits on review, downstream work continues in other worktrees
+6. when upstream feedback lands or a parent branch merges, the system updates the affected downstream worktrees
+7. if refresh is clean, the graph keeps moving
+8. if refresh is not clean, the system routes conflict handling, escalation, and human visibility to the right place in the graph
+
+That user journey is where Zazzles needs to beat the alternatives.
+
+For that journey:
+
+- Worktrunk is strong at steps 1 through 3 and parts of setup and cleanup around them
+- GitButler is strong at shaping branch flows and review ergonomics for one user's local workspace
+- Zazzles must be strongest at steps 4 through 8, because that is where dependency truth, propagation, stale-state visibility, and human review coordination become the real product problem
+
+So the decision case should be:
+
+- choose Worktrunk when you mostly want better local worktree operations for humans or agents
+- choose GitButler when you mostly want better stacked and parallel branch handling inside one working directory
+- choose Zazzles when your desired workflow is "keep multiple real worktrees and dependent PRs moving under one human owner while agents continue downstream work and the system manages refresh, review context, and graph state"
+
+If the product does not clearly win that journey, then it is too close to adjacent tools. If it does win that journey, then it occupies a real and differentiated position.
+
+## Feature Opportunities Informed by Worktrunk and GitButler
+
+The proposal should not stop at comparison. It should also say which higher-value capabilities Zazzles should intentionally build on top of what these products already prove.
+
+### Features Zazzles should likely match or borrow conceptually
+
+- repo- and user-scoped lifecycle hooks, because Worktrunk demonstrates they are extremely useful for setup, validation, and cleanup
+- cache and ignored-file materialization patterns, because cold-start cost is real in multi-worktree development
+- richer worktree status surfaces, including CI and machine-readable summaries
+- PR checkout and PR-aware branch resolution shortcuts
+- interactive worktree and graph selection in both CLI and desktop UI
+- strong commit hygiene helpers, including optional AI-generated commit messages and summaries
+
+### Features that would make Zazzles meaningfully more valuable
+
+- dependency-aware propagation plans:
+  when an upstream branch changes or merges, Zazzles should show exactly which downstream nodes are affected, in what order they should refresh, and why
+- PR graph state, not just branch state:
+  Zazzles should understand parent-relative PR relationships, merge status, review checkpoints, and stale PR chains as first-class graph data
+- conflict triage and escalation:
+  instead of only "rebase failed," Zazzles should classify the conflict, estimate blast radius, suggest the safest next step, and escalate to semantic migration when rebasing is the wrong tool
+- agent handoff and ownership metadata:
+  each worktree node should be able to carry who owns it, which agent last touched it, whether it is safe to auto-refresh, and what human approval is required next
+- integration-drift intelligence:
+  Zazzles should explain not only that a node is stale, but whether it is stale because of its parent, because of the integration branch, or because of both
+- review-ready orchestration:
+  the system should help humans understand what changed relative to parent, what downstream work depends on it, and what will happen if they merge now
+- graph repair and portability:
+  if local state or PR metadata drifts, Zazzles should reconcile and rebuild the graph rather than treating divergence as fatal
+
+### Product opportunity to lean into
+
+The strongest product opportunity is to become the orchestration layer that sits above worktree management and above stacked-branch UX.
+
+That means:
+
+- Worktrunk is a model for excellent local worktree operations
+- GitButler is a model for excellent stacked and parallel branch ergonomics
+- Zazzles should aim to be excellent at dependency graph truth, propagation, review coordination, and agent-safe isolated execution
+
+If the product leans into that layer clearly, then Worktrunk and GitButler become validating comparison projects rather than threatening substitutes.
 
 ## Market Context and Comparison
 
@@ -369,7 +558,8 @@ This proposal sits in a real product neighborhood, but its combination is still 
 High-level comparison:
 
 - native `git worktree` provides the isolation primitive, but not graph orchestration, PR awareness, or conflict-routing workflows
-- GitButler is the clearest direct comparison and likely the better tool for one human managing multiple changes in one workspace
+- [Worktrunk](https://github.com/max-sixty/worktrunk) is the closest CLI and worktree-native comparison: it simplifies local worktree creation, switching, cleanup, hooks, and agent-oriented automation on top of ordinary Git, but it is primarily a worktree manager rather than a PR-graph orchestrator
+- [GitButler](https://docs.gitbutler.com/overview) is the clearest comparison for stacked and parallel branch UX, but its docs explicitly center the model on the working directory and multiple applied branches inside one workspace, even when it supports stacked PR workflows locally
 - Graphite, `ghstack`, and similar tools validate that stacked PR workflows are useful, but they are primarily PR-stack tools rather than worktree-native orchestration systems
 - open-source worktree and agent tools validate the demand for isolated agent workspaces, but generally stop short of PR dependency orchestration and automated downstream refresh
 - Sapling validates that stacked and graph-aware history workflows matter, but it is a broader source-control approach rather than a worktree-native orchestration layer on top of standard Git
@@ -377,16 +567,26 @@ High-level comparison:
 The practical takeaway is:
 
 - the idea is not unique in every individual part
-- the specific combination of real worktree isolation, CLI-first agent workflows, DAG-aware metadata, and automated downstream propagation still looks differentiated
-- GitButler remains the main comparison point, but the honest positioning is "better for agent-oriented, isolated, propagation-heavy workflows," not "better in every way"
+- Worktrunk significantly reduces "is there a real market for agent-friendly worktree UX?" risk, because it already demonstrates that demand
+- GitButler significantly reduces "is there a real market for stacked and parallel branch UX?" risk, because it already demonstrates that demand
+- the specific combination of real worktree isolation, CLI-first agent workflows, DAG-aware metadata, PR/dependency orchestration, and automated downstream propagation still looks differentiated
+- directory-scoped profile and identity management is an additional differentiation opportunity, especially for engineers who work across multiple orgs, clients, or personal repositories on one machine
+- the honest positioning is not "better than both in every way"; it is "goes further into orchestration, review graph management, and isolated downstream propagation than either tool currently appears to"
 
 ## Competitive Positioning Summary
 
 The strongest product position is:
 
-- more Git-native and agent-native than GitButler
+- more orchestration- and PR-graph-aware than Worktrunk
+- more worktree-native and isolation-native than GitButler
 - more worktree-native than Graphite
 - less disruptive to adopt than Sapling
+
+Another way to say it:
+
+- Worktrunk helps you operate many worktrees
+- GitButler helps you shape and review many branches
+- Zazzles should help you coordinate many dependent worktrees, branches, PRs, and agents as one evolving graph
 
 This position is attractive, but it comes with honest downsides:
 
@@ -466,105 +666,11 @@ Recommended rules:
 - create one active branch per worktree
 - keep worktrees as visible sibling directories, not nested inside another worktree
 - use flat, filesystem-safe names
+- prefer human-meaningful names that describe the unit of work rather than its presumed merge order
+- treat detailed stack-suffix behavior as a feature-level CLI contract rather than as proposal-level policy
 - use flat, stable, human-meaningful names for branches and worktree directories
 - do not require branch renaming to communicate changing review or merge order
-- keep changing merge-order guidance outside the branch name
-
-## Merge Order Signaling Options
-
-The product should make merge order obvious to humans and agents, but the signaling mechanism should differ by workflow shape.
-
-Option 1: PR title prefixes for stacked-workflow sequencing
-
-- Example: `[stack 2/3] oauth-flow`
-- Best for user-facing signaling because PR titles are visible in review tooling and can be updated without renaming the branch
-- Recommended as the default human-facing signal for both linear stacks and DAG stacks
-
-Option 2: Repo-local sequencing metadata mirrored into PR labels or body fields
-
-- Best when the tool needs a durable machine-readable source of truth for "allowed next merge" and "blocked by" status
-- More flexible than naming, especially when the graph changes after branches already exist
-- Recommended as the durable source of truth for stack orchestration, even if PR titles also carry hints
-
-Option 3: Merge-order enforcement checks
-
-- Best when the product must do more than merely display order and should actively prevent invalid merges
-- Could be implemented through CLI guardrails, GitHub status checks, or branch-protection-compatible required checks
-- Recommended as part of the stacked-workflow operating model once PR lifecycle support exists
-
-Recommended approach:
-
-- default new feature or deliverable worktrees to a `-0` suffix so they can later grow into a stack without renaming
-- use PR titles as the primary human-facing signal for required order
-- use repo-local metadata as the durable source of truth for stack sequencing
-- add enforcement checks so merge order is not merely advisory
-
-## Hierarchical Stack Numbering Option
-
-For stacked workflows, a hierarchical numbering convention should be the default branch and worktree suffix pattern, while still being treated as a coordinate rather than the only source of truth.
-
-Recommended shape:
-
-- initial worktree: `feature-name-0`
-- linear stack: `feature-name-1`, `feature-name-2`, `feature-name-3`
-- DAG stack: `feature-name-2-1`, `feature-name-2-1-1`, `feature-name-2-1-2`, `feature-name-2-2`
-
-Why this is attractive:
-
-- it makes the current planned stack shape legible in branch names
-- it gives humans and agents a compact way to talk about a node's place in the stack
-- it works naturally for branch points and convergence prerequisites
-
-Important limits:
-
-- do not use raw branch names that begin with `-`, because they are awkward in shells and tooling
-- use a suffix form such as `feature-name-2-1` rather than a leading token like `-2.1`
-- numbering should be treated as a helpful stack coordinate, not the sole enforcement mechanism
-- once the graph changes materially, repo-local metadata and PR state remain the canonical source of truth
-
-Convergence example:
-
-- `feature-name-2-1-2` and `feature-name-2-2-2` may both need to merge before `feature-name-3` becomes eligible
-- the tool should compute and surface that blocked state explicitly rather than assuming numbering alone is sufficient
-
-Recommended use:
-
-- use `-0` as the default starting suffix for new feature or deliverable worktrees
-- extend that suffix hierarchically when a worktree becomes part of a linear stack or DAG stack
-- keep PR titles and repo-local metadata as the primary human-facing and machine-readable sequencing layers
-- allow a worktree to remain at `-0` forever if it never becomes part of a deeper stack
-
-## Speculative Depth Guardrail
-
-The product should include a guardrail for how far ahead stacked work is allowed to get relative to merged or validated upstream reality.
-
-Recommended term:
-
-- `stack lead limit`
-
-Definition:
-
-- the maximum amount of unmerged downstream stack depth the tool should allow beyond the last trusted upstream point
-
-Why this matters:
-
-- cosmetic or small review feedback can often be propagated with minimal rework
-- "this whole approach is wrong" feedback can invalidate large amounts of downstream speculative work
-- agents should not be allowed to run arbitrarily far ahead without an explicit policy
-
-Possible policy levers:
-
-- maximum number of unmerged descendants from the last merged branch
-- maximum stack depth beyond the last human-approved checkpoint
-- stricter limits for DAG stacks than for linear stacks
-- manual override by a human when the team intentionally accepts more speculative risk
-
-Expected CLI behavior:
-
-- warn when a proposed new stacked worktree would exceed the configured `stack lead limit`
-- optionally block creation unless a human override is provided
-- surface current speculative depth in status output
-- allow per-repo tuning because acceptable risk differs by team and feature area
+- keep changing merge-order guidance primarily in PR titles and repo-local sequencing metadata
 
 Why this is the right model:
 
@@ -576,7 +682,8 @@ Why this is the right model:
 State storage note:
 
 - repo-local orchestration state should live with the repo container, while user-level application state should live in the user's home directory
-- the exact naming and directory contract should be treated as a feature-level requirement rather than proposal-level detail
+- the product should keep using `.zazz/` and `~/.zazz/` for hidden state even though the product-facing name is `zazzles`
+- finer-grained naming and directory contracts should be treated as feature-level requirements rather than proposal-level detail
 
 ## Risks and Mitigations
 
@@ -735,8 +842,8 @@ Capabilities:
 - detect when the configured remote integration branch has advanced
 - mark affected worktrees as stale relative to that remote base
 - support graph-wide or subtree refresh against the configured remote base
+- expose a `zaz list` or `zaz status` view that shows freshness relative to both parent and remote integration branch
 - detect worktrees under active development and defer automated refresh for those nodes while preserving pending-refresh status
-- expose a `worktree list` or `status` view that shows freshness relative to both parent and remote integration branch
 - update branch and PR state after a successful sync
 
 Why it matters:
@@ -840,7 +947,7 @@ Explicit non-goal for the first release:
 
 Likely bootstrap flows the product should support:
 
-- initialize a new repo container in the opinionated layout
+- initialize a new repo container in the opinionated layout, with `zaz init <repo-name>` creating a container directory whose name matches the repo name
 - inspect an existing repo and report whether it can be adopted as-is
 - guide the user through missing requirements such as Git auth, remote setup, or unsupported worktree topology
 
@@ -1071,8 +1178,6 @@ This should not be positioned as a GitButler clone. It should be positioned as a
 
 ## Open Questions
 
-- What should the product be named?
-- Should the local metadata live in a hidden repo folder, a managed app folder, or both?
 - Should branch names remain user-controlled while worktree folder names are sanitized and tool-managed?
 - How should the tool detect "active development" strongly enough to defer automatic refresh without creating too many false positives?
 - Which sequencing signal should be canonical in DAG mode: PR title, PR label, repo-local metadata, or some combination?

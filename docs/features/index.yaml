@@ -1,16 +1,39 @@
 version: 1
-last_updated: 2026-03-28
+last_updated: 2026-03-31
 features:
   - key: worktree-orchestration-cli
-    title: Worktree Orchestration CLI
+    title: zazzles Worktree Orchestration CLI
     status: proposed
     file: worktree-orchestration-cli.md
+    companion_docs:
+      - worktree-orchestration-cli/README.md
+      - worktree-orchestration-cli/init.md
+      - worktree-orchestration-cli/adopt-existing-layout.md
+      - worktree-orchestration-cli/add.md
+      - worktree-orchestration-cli/status-and-list.md
+      - worktree-orchestration-cli/inspect-and-graph.md
+      - worktree-orchestration-cli/sync-and-refresh.md
+      - worktree-orchestration-cli/conflicts-and-resolve.md
+      - worktree-orchestration-cli/profiles-and-auth.md
+      - worktree-orchestration-cli/contribution-lifecycle.md
     domain: cli, git, worktrees, pr orchestration, agent workflows
     current_milestone: M0 proposed
     current_state: >
       No implementation is live yet. The feature has been defined from the proposal
-      as the foundational CLI surface for local DAG state, worktree lifecycle,
-      PR management, propagation, and agent-friendly automation.
+      as the foundational zazzles CLI surface for local DAG state, worktree lifecycle,
+      PR management, propagation, agent-friendly automation, and managed stack naming.
     purpose: >
-      Defines the long-lived CLI capability for operating worktree graphs,
-      parent-relative PR workflows, and automated downstream propagation on one machine.
+      Defines the long-lived zazzles CLI capability for operating worktree graphs,
+      parent-relative PR workflows, automated downstream propagation, and `.zazz`-backed stack coordination on one machine.
+  - key: zazzles-app-and-ui
+    title: zazzles App and UI
+    status: proposed
+    file: zazzles-app-and-ui.md
+    domain: app, ui, graph review, diff, conflict workflows
+    current_milestone: M0 proposed
+    current_state: >
+      No installable app implementation is live yet. The feature is defined as the
+      future visual application surface built on the shared zazzles core and CLI state.
+    purpose: >
+      Defines the long-lived zazzles application and UI capability for graph-native review,
+      visual worktree operations, and future local-only-file maintenance flows.

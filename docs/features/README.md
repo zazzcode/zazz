@@ -1,7 +1,11 @@
 # Features
 
-Formal feature documents have not been authored yet.
+This directory contains the durable feature documents for the product.
 
-The current source of product direction is the proposal in `docs/proposals/worktree-native-pr-orchestrator.md`.
+Current feature set:
 
-Once the proposal is approved, this directory should gain one or more durable feature documents and `docs/features/index.yaml` should be updated to point to them.
+- `worktree-orchestration-cli.md`: the current feature definition for the zazzles CLI, including the `zaz` command direction and `.zazz` state model
+- `worktree-orchestration-cli/`: companion command-family docs that break the CLI feature into navigable capability slices such as `init`, `add`, `sync`, `conflicts`, and profile/auth flows
+- `zazzles-app-and-ui.md`: the current feature definition for the installable zazzles app and its graph/review UI direction
+
+The proposal in `docs/proposals/worktree-native-pr-orchestrator.md` remains the broader product-direction document, while the feature docs capture the longer-lived product capabilities in more concrete detail.
