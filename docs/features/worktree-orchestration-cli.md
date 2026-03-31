@@ -1,8 +1,8 @@
-# Feature: Worktree Orchestration CLI
+# Feature: zazzles Worktree Orchestration CLI
 
 ## Feature Summary
 
-The Worktree Orchestration CLI is the primary execution surface for managing local worktree graphs, parent-relative PR workflows, automated propagation, and agent-friendly orchestration on a single machine.
+The zazzles Worktree Orchestration CLI is the primary execution surface for managing local worktree graphs, parent-relative PR workflows, automated propagation, and agent-friendly orchestration on a single machine.
 
 This feature exists so humans and agents can operate the product without depending on a desktop UI. It is the foundational user-facing capability that proves the product model before richer visualization and review experiences are layered on top.
 
@@ -13,7 +13,7 @@ At its core, the CLI exists to manage the chaos of out-of-order PR review and me
 - Current milestone: M0 Proposed
 - Next milestone: M1 CLI MVP
 - Services affected:
-  - local Git repository and worktree container
+  - local Git repository and repo root
   - local `.zazz/` state
   - GitHub PR integration
   - remote integration branch state
@@ -41,6 +41,7 @@ The current implementation direction for this feature is:
 - repo-local state in `.zazz/`
 - user-global product state in `~/.zazz/worktrees/`
 - machine-readable JSON output for agent-facing operations
+- public CLI invocation through `zaz`
 
 Important clarification:
 
@@ -76,12 +77,12 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A["Run CLI doctor/init"] --> B{"Repo container ready?"}
-    B -->|No| C["Guide bootstrap or adoption"]
+    A["Run CLI doctor/init"] --> B{"Repo root ready?"}
+    B -->|No| C["Guide bootstrap"]
     B -->|Yes| D["Initialize .zazz state"]
     C --> D
     D --> E["Create worktree node from parent branch"]
-    E --> F["Materialize local-user files and settings"]
+    E --> F["Materialize untracked files"]
     F --> G["Register node and edge in DAG state"]
     G --> H["List and inspect graph status"]
     H --> I["Return human-readable and JSON output"]
@@ -96,14 +97,14 @@ sequenceDiagram
     participant DAG as .zazz State
     participant GIT as System Git
     participant FS as Filesystem
-    participant LP as Local User Profile
+    participant LP as Untracked Files Source
 
     U->>CLI: create node from parent branch
     CLI->>CLI: validate prerequisites and repo topology
     CLI->>DAG: initialize or load local graph state
     CLI->>GIT: create branch and worktree
     GIT->>FS: materialize sibling worktree directory
-    CLI->>LP: copy or link local-only files and settings
+    CLI->>LP: copy configured untracked files
     CLI->>DAG: register node, parent, path, and status
     CLI->>U: return node status and graph summary
 ```
@@ -174,7 +175,20 @@ A managed unit consisting of:
 - optional PR state
 - optional agent ownership state
 
-The node identity should not depend on a numeric suffix in the branch or worktree name. Human-meaningful names are preferred, and uniqueness can be handled separately from dependency truth.
+The node identity must not depend on a numeric suffix in the branch or worktree name. Human-meaningful names are preferred, and the DAG metadata remains the source of truth for dependency relationships.
+
+### Managed stack suffixes
+
+For stacked branch lineages, the CLI should apply a managed numeric suffix convention without making that suffix the semantic source of truth.
+
+Rules:
+
+- the user may create the first branch in a line with any descriptive unsuffixed name
+- the CLI should not require an initial `-0` suffix
+- when the user creates the first stacked child from an unsuffixed managed branch, the CLI should rename the existing branch and worktree to `-1` and create the new child as `-2`
+- when the user extends an already suffixed stacked line, the CLI should assign the next sequential suffix in that line
+- if the parent branch has already been pushed and remote lifecycle management is active, the CLI must push the renamed branch first, confirm the new remote ref exists, and only then delete the old remote branch name as part of cleanup
+- these suffixes are a user-facing lineage aid only; the actual DAG in `.zazz/` remains authoritative for dependency truth, merge handling, and convergence behavior
 
 ### Parent source
 
@@ -185,24 +199,29 @@ When creating a new managed worktree node, the parent may be:
 
 The CLI should support both patterns and track them consistently inside the same local DAG/state model.
 
-### Local user profile materialization
+### Untracked-file materialization
 
-The process of copying, linking, or otherwise materializing local-only user files into a newly created worktree so that the worktree is actually usable immediately.
+The process of copying or otherwise materializing configured untracked files into a newly created worktree so that the worktree is actually usable immediately.
 
 Examples may include:
 
 - `.env` files
 - local editor or agent settings
-- cached local-only support files
+- cached untracked support files
 - other explicitly configured per-user or per-machine files required for normal development
 
-This matters because standard Git branching keeps a user in one working directory, while managed worktrees create a new directory that would otherwise be missing those local-only files.
+This matters because standard Git branching keeps a user in one working directory, while managed worktrees create a new directory that would otherwise be missing those untracked files.
 
 Materialization source rules:
 
-- if a new worktree is created from another local managed worktree, local-only files should be materialized from that source worktree
-- if a new worktree is created from the configured remote integration branch, local-only files should be materialized from the local integration worktree for `main` or `dev`
+- if a new worktree is created from another local managed worktree, untracked files should be materialized from that source worktree
+- if a new worktree is created from the configured remote integration branch, untracked files should be materialized from the local integration worktree for `main` or `dev`
 - the local integration worktree should therefore be treated as a stable, always-runnable source of truth for origin-rooted worktree creation
+
+Future direction:
+
+- M1 can treat untracked-file maintenance after worktree creation as a manual process
+- a later desktop/client-oriented milestone should let the user diff untracked files in the current worktree against the integration worktree and explicitly choose which changes to accept back into that canonical source
 
 ### Graph edge
 
@@ -263,8 +282,8 @@ The DAG and per-repo conflict state should remain canonical inside `.zazz/`.
 
 The same product name is used in both places, but the scope is determined by location:
 
-- `.zazz/` inside the repo container is repo-local orchestration state
-- `~/.zazz/` in the user home directory is user-global Zazz family state
+- `.zazz/` inside the repo root is repo-local orchestration state
+- `~/.zazz/` in the user home directory is user-global Zazz family state used by zazzles and related Zazz tooling
 
 Recommended user-global layout:
 
@@ -286,7 +305,7 @@ Recommended user-global layout:
 Recommended repo-local layout:
 
 ```text
-repo-container/
+repo-root/
 ├── .bare/
 ├── .zazz/
 │   ├── config.toml
@@ -294,7 +313,7 @@ repo-container/
 │   ├── worktrees.json
 │   ├── conflicts/
 │   └── locks/
-├── main/
+├── <integration-branch>/
 └── feature-worktree/
 ```
 
@@ -321,15 +340,16 @@ AI and agents may implement, synchronize, and propose resolutions, but a human r
 
 ### Primary CLI flow
 
-1. Initialize or adopt a repo container.
+1. From a parent directory, initialize a repo root with `zaz init <repo-name>`, where the repo name and directory name must match.
 2. Create a worktree node from a chosen parent.
-3. Register it in `.zazz/`.
-4. Open a draft PR against the parent branch.
-5. Continue downstream work in additional nodes.
-6. Detect upstream updates or merges.
-7. Propagate those changes downstream.
-8. Resolve conflicts with AI assistance or semantic migration when needed.
-9. Detect when the remote integration branch has advanced and refresh affected nodes as needed.
+3. If the operation turns an unsuffixed branch into a stacked lineage, rename the existing node to `-1`, create the new node as `-2`, and, when remote lifecycle management is active, push the renamed parent before deleting the old remote branch name.
+4. Register the resulting nodes in `.zazz/`.
+5. Open a draft PR against the parent branch.
+6. Continue downstream work in additional nodes.
+7. Detect upstream updates or merges.
+8. Propagate those changes downstream.
+9. Resolve conflicts with AI assistance or semantic migration when needed.
+10. Detect when the remote integration branch has advanced and refresh affected nodes as needed.
 
 Important flow nuance:
 
@@ -365,45 +385,79 @@ This status view should include both:
 6. The agent resolves directly in the worktree or proposes a resolution.
 7. CLI reconciles the result and refreshes DAG state.
 
+### Example DAG flow
+
+This numbered DAG sketch is intentionally level-aware: `3` is a convergence step after `2.1` and `2.2`, not a peer of them.
+
+```mermaid
+flowchart TD
+    L1["1. Foundation branch"]
+    L21["2.1 Parallel child A"]
+    L22["2.2 Parallel child B"]
+    L3["3. Convergence branch"]
+
+    L1 --> L21
+    L1 --> L22
+    L21 --> L3
+    L22 --> L3
+```
+
 ## CLI Vocabulary and Surface Direction
 
-The public command should be `zazz`. The CLI should feel familiar to users who already know `git` and `gh`, while still exposing Zazz-specific graph and orchestration behavior clearly.
+The public command should be `zaz`. The CLI should feel familiar to users who already know `git` and `gh`, while still exposing zazzles-specific graph and orchestration behavior clearly.
 
 Direction:
 
-- use `zazz` as the top-level command
-- make `zazz --help` the primary discoverability entry point for humans
+- use `zaz` as the top-level command
+- make `zaz --help` the primary discoverability entry point for humans
 - keep the command families Git-like and verb-first where possible
+- treat worktrees as the default operating model, so the core lifecycle commands should not require a redundant `worktree` noun
 - prefer human-readable defaults with `--json` for agent consumption
 - make help and error output part of the contract, not an afterthought
 
 Milestone 1 should explicitly define these initial command families:
 
-- `zazz init`
-- `zazz status`
-- `zazz worktree ...`
-- `zazz graph ...`
-- `zazz sync ...`
-- `zazz conflicts ...`
-- `zazz resolve ...`
+- `zaz init`
+- `zaz status`
+- `zaz add`
+- `zaz list`
+- `zaz inspect`
+- `zaz remove`
+- `zaz graph ...`
+- `zaz sync ...`
+- `zaz conflicts ...`
+- `zaz resolve ...`
+
+Future CLI administration capability to add after the M1 bootstrap and worktree flows are stable:
+
+- `zaz config ...` for viewing and updating user-global defaults such as the default integration branch
 
 Illustrative command shape:
 
 ```sh
-zazz --help
-zazz init
-zazz status
-zazz worktree add rbac-mvp-auth-foundation --from main
-zazz worktree add rbac-mvp-oauth --from rbac-mvp-auth-foundation
-zazz worktree list
-zazz graph inspect rbac-mvp-oauth
-zazz sync refresh --all
-zazz sync refresh rbac-mvp-oauth
-zazz conflicts show rbac-mvp-oauth
-zazz resolve rbac-mvp-oauth
+zaz --help
+zaz init zazzles
+zaz init zazzles --integration dev
+zaz status
+zaz add auth-foundation --from dev
+zaz add auth-foundation --from auth-foundation
+zaz list
+zaz inspect auth-foundation-2
+zaz graph auth-foundation-2
+zaz sync refresh --all
+zaz sync refresh auth-foundation-2
+zaz conflicts show auth-foundation-2
+zaz resolve auth-foundation-2
 ```
 
+In this example, the second `add` turns the original `auth-foundation` branch into `auth-foundation-1` and creates the new child as `auth-foundation-2`.
+
 The exact final command families may still evolve, but Milestone 1 should explicitly define the public CLI vocabulary rather than leaving it implicit in implementation.
+
+Important milestone note:
+
+- reading user-global config during `zaz init` is part of the bootstrap direction
+- editing user-global config through a first-class `zaz config` command is future work and should be planned as a later CLI milestone rather than added to the current `init-add-worktree` deliverable
 
 ## Milestone Overview
 
@@ -419,12 +473,13 @@ The exact final command families may still evolve, but Milestone 1 should explic
 Outcome criteria:
 
 - the local DAG/state model is clearly defined and initialized in a durable repo-local location
-- the public `zazz` command surface is defined clearly enough that `zazz --help` provides a stable entry point for both humans and agents
-- users can initialize the required repo/worktree topology, with readiness checks performed as part of `zazz init`
-- a local integration worktree for `main` or `dev` is kept available as the stable origin-rooted creation source
+- the public `zaz` command surface is defined clearly enough that `zaz --help` provides a stable entry point for both humans and agents
+- users can initialize the required repo/worktree topology by running `zaz init <repo-name> [--integration <branch>]` from a parent directory, with readiness checks performed as part of that command
+- a local integration worktree for the resolved integration branch is kept available as the stable origin-rooted creation source
 - users can create a new managed worktree that is actually usable immediately
-- required local-only files and settings are materialized automatically
+- required untracked files are materialized automatically
 - users can create and inspect local DAG nodes through the CLI
+- users can extend a stack without pre-seeding `-0`, with the CLI applying `-1`, `-2`, and later suffixes automatically when a stack lineage is formed
 - users can see which worktrees are current or stale relative to their parent and configured integration base
 - users can create a worktree from either a local managed parent node or the configured remote integration branch
 - remote integration-branch movement can refresh affected worktrees automatically
@@ -441,40 +496,48 @@ M1 boundary:
 
 Proposed M1 command surface:
 
-- `zazz --help`: primary discoverability entry point for humans and the top-level summary of the CLI contract.
-- `zazz init`: perform prerequisite checks, validate or adopt the repo/container topology, initialize local `.zazz/` state, and ensure the local integration worktree convention is established.
-- `zazz status`: show repo-level Zazz health, managed-worktree summary, and whether the repo appears ready for normal CLI operations.
-- `zazz worktree add <name> --from <local-node-or-origin-base>`: create a new managed worktree from either a local managed node or the configured origin-rooted integration branch, materialize local-only files, and register the node in `.zazz/`.
-- `zazz worktree list`: list all managed worktrees for the repo with high-level freshness and readiness information.
-- `zazz worktree inspect <name>`: show detailed state for one managed worktree, including path, origin, intended parent, operational base, and current status.
-- `zazz worktree remove <name>`: safely remove a managed worktree and update local orchestration state when removal is allowed.
-- `zazz graph inspect <name>`: inspect the graph relationships around a worktree, including parent, children, and ancestry-related metadata.
-- `zazz sync refresh --all`: refresh all eligible managed worktrees in the repo against the configured remote integration branch.
-- `zazz sync refresh <name>`: refresh one managed worktree against the configured remote integration branch.
-- `zazz conflicts show <name>`: display the saved conflict artifact and recovery context for a worktree whose origin refresh failed.
-- `zazz resolve <name>`: run or resume the agent-assisted resolution flow for a worktree with a saved origin-refresh conflict.
+- `zaz --help`: primary discoverability entry point for humans and the top-level summary of the CLI contract.
+- `zaz init <repo-name> [--integration <branch>]`: run from the desired parent directory, resolve the named GitHub repo, create a new repo root directory with the same name, initialize `.bare/`, initialize local `.zazz/` state, and establish the resolved integration branch as the integration worktree.
+- `zaz status`: show repo-level zazzles health, managed-worktree summary, and whether the repo appears ready for normal CLI operations.
+- `zaz add <name> --from <local-node-or-origin-base>`: create a new managed worktree from either a local managed node or the configured origin-rooted integration branch, materialize untracked files, and register the node in `.zazz/`.
+- `zaz list`: list all managed worktrees for the repo with high-level freshness and readiness information.
+- `zaz inspect <name>`: show detailed state for one managed worktree, including path, origin, intended parent, operational base, and current status.
+- `zaz remove <name>`: safely remove a managed worktree and update local orchestration state when removal is allowed.
+- `zaz graph <name>`: inspect the graph relationships around a worktree, including parent, children, and ancestry-related metadata.
+- `zaz sync refresh --all`: refresh all eligible managed worktrees in the repo against the configured remote integration branch.
+- `zaz sync refresh <name>`: refresh one managed worktree against the configured remote integration branch.
+- `zaz conflicts show <name>`: display the saved conflict artifact and recovery context for a worktree whose origin refresh failed.
+- `zaz resolve <name>`: run or resume the agent-assisted resolution flow for a worktree with a saved origin-refresh conflict.
 
 Command-shape notes:
 
-- `zazz init` should perform prerequisite and topology checks before making changes, rather than requiring a separate preflight-only command in M1
-- `zazz worktree add` is the main M1 creation command and should intentionally mirror `git worktree add` muscle memory as closely as the product's extra orchestration requirements allow
-- unlike raw Git, Zazz may derive the worktree path from the managed repo layout, so the primary positional argument should be the managed worktree name and the source branch or node should be expressed explicitly with `--from`
+- `zaz init` should perform prerequisite and topology checks before making changes, rather than requiring a separate preflight-only command in M1
+- the first positional argument for `zaz init` should be the repo name, and the created directory must use that same name with no separate directory override in M1
+- `zaz init` should accept `--integration <branch>` with `-i` as the short flag
+- integration branch resolution order should be: explicit flag, user-global config default, fallback `main`
+- the user-global config file for this default should be `~/.zazz/config.toml` with top-level `integration_branch`
+- M1 `zaz init` should support fresh bootstrap only; adopting or converting an already-existing local repo layout is out of scope
+- `zaz add` is the main M1 creation command and should intentionally mirror `git worktree add` muscle memory as closely as the product's extra orchestration requirements allow, while keeping worktrees implicit in the product vocabulary
+- unlike raw Git, zazzles may derive the worktree path from the managed repo layout, so the primary positional argument should be the managed worktree name and the source branch or node should be expressed explicitly with `--from`
+- when `zaz add` turns a previously unsuffixed branch into the start of a stack, the CLI should rename that existing branch/worktree to `-1` and assign the new child the next suffix automatically
+- remote branch reconciliation for already-pushed parents should use the same naming rule once the GitHub-aware lifecycle milestone is active: push the renamed parent first, verify the new remote ref, then remove the old remote branch name
 - the M1 command surface is intentionally focused on local graph truth, worktree usability, origin refresh, and conflict recovery rather than PR lifecycle automation
 
 The exact flags may still evolve during spec work, but this command set should be treated as the working M1 CLI contract for planning purposes.
 
 Initial capabilities in this milestone:
 
-- define the public `zazz` command vocabulary and help surface for the initial CLI
-- prerequisite and repo-container bootstrap/adoption checks performed by `zazz init`
+- define the public `zaz` command vocabulary and help surface for the initial CLI
+- prerequisite checks and opinionated repo-root bootstrap performed by `zaz init <repo-name>`
 - local `.zazz/` initialization
 - define and persist the initial local DAG structure and node/edge metadata model
 - facilitate the opinionated bare-repo plus sibling-worktree structure required by the project
-- maintain a local integration worktree for `main` or `dev` as a clean, runnable origin-rooted source
+- maintain a local integration worktree for the resolved integration branch as a clean, runnable origin-rooted source
 - create a worktree node from either a local parent node or the configured remote integration branch
 - generate or validate flat, meaningful worktree names
-- automatically materialize configured local-only user files into a newly created worktree
-- support a configurable source worktree and file-copy profile for local-only assets
+- automatically convert the first branch in a stack from an unsuffixed name to a `-1` / `-2` lineage when the first child is created
+- automatically materialize untracked files into a newly created worktree based on the saved repo-local manifest
+- support a configurable integration branch and source worktree recorded in repo-local state
 - support verification that the new worktree is ready for actual development use
 - list worktree nodes and show graph status
 - show whether each node is current relative to its parent and the configured integration base
@@ -488,12 +551,13 @@ Initial capabilities in this milestone:
 
 Likely deliverables:
 
-- prerequisite detection inside `zazz init` and the Git interaction wrapper
+- prerequisite detection inside `zaz init` and the Git interaction wrapper
 - `.zazz/` DAG structure, operational ancestry model, and local state bootstrap
-- repo-container and sibling-worktree bootstrap helpers
+- repo-root and sibling-worktree bootstrap helpers
 - local integration-worktree management
-- local-user file sync profile and materialization logic
+- untracked-files manifest and materialization logic
 - worktree create/list/status/cleanup commands
+- local branch/worktree rename handling for first-stack creation
 - readiness verification for newly created worktrees
 - graph inspection and JSON output contract
 - integration-base freshness tracking in graph/status output
@@ -507,12 +571,12 @@ Suggested M1 deliverable slices
 
 These are feature-level slices, not full SPECs. They are intended to be small enough that a human plus agent could plausibly complete each one in roughly a 12-hour implementation window, excluding later SPEC authoring time.
 
-#### M1-D1: Local DAG/state bootstrap and repo-container validation
+#### M1-D1: Local DAG/state bootstrap and repo-root validation
 
 Focus:
 
-- prerequisite detection inside `zazz init`
-- repo-container adoption/bootstrap checks
+- prerequisite detection inside `zaz init`
+- repo-root bootstrap checks
 - `.zazz/` structure
 - node, edge, and operational ancestry model
 
@@ -520,19 +584,19 @@ Likely user-visible outcome:
 
 - the CLI can tell whether a repo is ready and initialize trustworthy local orchestration state
 
-#### M1-D2: Managed worktree creation and local-user file materialization
+#### M1-D2: Managed worktree creation and untracked-file materialization
 
 Focus:
 
 - create from local parent or remote integration base
 - opinionated sibling-worktree layout
 - local integration-worktree convention
-- local-only file and settings materialization
+- untracked-file materialization
 - readiness verification
 
 Likely user-visible outcome:
 
-- a new worktree can be created and used immediately without manual copying of ignored files
+- a new worktree can be created and used immediately without manual copying of untracked files
 
 #### M1-D3: Worktree list/status and freshness inspection
 
@@ -557,6 +621,23 @@ Focus:
 Likely user-visible outcome:
 
 - all managed worktrees in a repo can be refreshed against the shared origin branch without manual branch-by-branch rebasing
+
+#### M2-D3: Untracked file management and manifest maintenance
+
+Focus:
+
+- inspect the saved untracked-files manifest
+- add or remove entries through CLI commands
+- refresh the manifest from the current integration worktree when the user wants to rescan
+- evaluate safe copy-back or sync-to-integration flows for selected untracked files
+
+Likely user-visible outcome:
+
+- the user can evolve which untracked files are propagated to future worktrees without hand-editing `.zazz/untracked-files.json`
+
+Important policy note:
+
+- copy-back or bidirectional untracked-file sync should remain future work until overwrite, timestamp, directory, and conflict policy are explicitly specified
 
 #### M1-D5: Conflict capture, persistence, and handoff
 
@@ -590,10 +671,11 @@ Focus:
 - GitHub auth/adapters
 - draft and ready-for-review PR creation
 - PR state mirroring into local graph state
+- remote branch rename reconciliation when a pushed parent is converted into a numbered stack lineage, including push-first verification before old-name cleanup
 
 Likely user-visible outcome:
 
-- managed worktrees can become reviewable PR units directly from the CLI
+- managed worktrees can become reviewable PR units directly from the CLI, including cases where the CLI must rename an already-pushed parent branch to `-1`, push that renamed branch, verify it on GitHub, and only then clean up the old remote name before continuing the stack
 
 ## Current State Summary
 
@@ -604,6 +686,7 @@ The feature is currently proposed only. No milestones have shipped yet.
 - PR lifecycle automation should become the next milestone after origin-refresh and conflict-handoff behavior is stable
 - parent-to-child propagation after local PR merge should land in a later milestone after origin-refresh behavior is stable
 - desktop visualization and review should build on top of this feature rather than replacing it
+- a later desktop/client milestone should support reviewing untracked files in the current worktree against the integration worktree and help the user accept selected updates back into that integration-worktree source of truth
 - future multi-machine or multi-user coordination may extend this feature, but that is out of MVP scope
 - future AI-assisted PR review may complement the CLI, but human sign-off remains mandatory
 
@@ -621,9 +704,9 @@ Constraints:
 
 - one-machine local orchestration for the initial release
 - GitHub as first remote host
-- flat sibling worktree naming and managed container layout
-- branch and worktree names should be descriptive rather than relying on sequence numbers as dependency truth
-- newly created worktrees should be made usable without forcing the user to manually recopy common local-only files every time
+- flat sibling worktree naming and managed repo-root layout
+- branch and worktree names should be descriptive, with CLI-managed `-1`, `-2`, and later suffixes used for stacked lineage only and never as dependency truth
+- newly created worktrees should be made usable without forcing the user to manually recopy common untracked files every time
 
 Non-goals:
 
@@ -635,9 +718,9 @@ Non-goals:
 
 - should propagation run only on clean working states, or can the CLI safely manage dirty worktrees?
 - how much AI context should be included by default during conflict resolution?
-- what should the final public command namespace be?
 - should intended work dependencies and current operational ancestry be stored as separate graph layers in `.zazz/`, or derived from a single richer model?
-- should local-only files be copied, symlinked, or managed by a per-repo materialization strategy depending on file type?
+- should untracked files be copied, symlinked, or managed by a per-repo materialization strategy depending on file type?
+- should untracked-file maintenance eventually gain a desktop/client diff-and-accept workflow against the integration worktree, and if so what should the acceptance/write-back UX look like?
 - what should the exact schema and naming convention be for saved conflict artifacts under `.zazz/`?
 
 ## Deliverable Handoff Considerations
@@ -645,20 +728,20 @@ Non-goals:
 The next deliverables should likely start with:
 
 - CLI foundation and local DAG metadata
-- worktree creation and local-user file materialization
+- worktree creation and untracked-file materialization
 - remote-base refresh
 - conflict artifact capture
 
 Recommended first deliverable:
 
-- implement the first slice of M1 around worktree bootstrap, local-user file materialization, and readiness verification so a new managed worktree is usable immediately
+- implement the first slice of M1 around worktree bootstrap, untracked-file materialization, and readiness verification so a new managed worktree is usable immediately
 
 Core M1 deliverables that should be called out explicitly:
 
 - local `.zazz/` DAG/state structure design and bootstrap
 - local integration-worktree convention and management
-- CLI worktree creation in the opinionated repo-container model
-- automatic copying or materialization of untracked local files into new worktrees
+- CLI worktree creation in the opinionated repo-root model
+- automatic copying or materialization of untracked files into new worktrees
 - repo-local conflict artifact capture for failed origin refreshes
 
 The desktop application should be specified as a separate feature that depends on this feature's core workflows rather than replacing them.

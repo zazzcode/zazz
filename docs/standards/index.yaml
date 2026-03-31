@@ -1,5 +1,5 @@
 version: 1
-last_updated: 2026-03-28
+last_updated: 2026-03-30
 standards:
   - id: repo-foundations
     title: Repo Foundations
@@ -9,6 +9,25 @@ standards:
     applies_to:
       paths:
         - "**"
+      activities:
+        - planning
+        - implementation
+        - review
+        - documentation
+  - id: rust-cli-best-practices
+    title: Rust CLI Development Best Practices
+    path: rust-cli-best-practices.md
+    status: active
+    summary: Use this standard when planning, implementing, reviewing, or documenting the Rust CLI, its command contracts, its supporting workspace structure, or its repo-local state and JSON output behavior.
+    applies_to:
+      paths:
+        - "Cargo.toml"
+        - "Cargo.lock"
+        - "rust-toolchain.toml"
+        - "apps/cli/**"
+        - "crates/**"
+        - "docs/deliverables/**"
+        - "docs/standards/**"
       activities:
         - planning
         - implementation

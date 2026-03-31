@@ -1,4 +1,4 @@
-# Proposal: Worktree-Native PR Orchestration for Humans and Agents
+# Proposal: zazzles Worktree-Native PR Orchestration for Humans and Agents
 
 ## Status
 
@@ -50,6 +50,14 @@ The opportunity is to build a worktree-native orchestration layer that makes sta
 - AI-assisted conflict handling and semantic migration for the file conflicts that propagation inevitably creates
 
 The core product problem is not "how do we invent virtual branches again." The core product problem is "how do we manage branch dependency metadata, PR lifecycle, rebases, migrations, and review ergonomics on top of standard Git primitives."
+
+Product naming direction:
+
+- the product name is `zazzles`
+- the public CLI command is expected to be `zaz`
+- the core `zaz` lifecycle commands should use concise top-level verbs such as `zaz add` and `zaz list` rather than repeating `worktree` in every command
+- hidden repo-local and user-global state should remain `.zazz/` and `~/.zazz/` for compatibility with the broader Zazz / zazzcode ecosystem
+- repo-container bootstrap should be opinionated: `zaz init <repo-name>` should create a container directory whose name matches the repo name rather than allowing a separate directory name
 
 ## Core Workflow to Enable
 
@@ -379,7 +387,7 @@ Recommended rules:
 - keep worktrees as visible sibling directories, not nested inside another worktree
 - use flat, filesystem-safe names
 - prefer human-meaningful names that describe the unit of work rather than its presumed merge order
-- allow a numeric suffix only as an optional collision-avoidance or convenience mechanism, not as the semantic source of dependency truth
+- treat detailed stack-suffix behavior as a feature-level CLI contract rather than as proposal-level policy
 
 Why this is the right model:
 
@@ -391,7 +399,8 @@ Why this is the right model:
 State storage note:
 
 - repo-local orchestration state should live with the repo container, while user-level application state should live in the user's home directory
-- the exact naming and directory contract should be treated as a feature-level requirement rather than proposal-level detail
+- the product should keep using `.zazz/` and `~/.zazz/` for hidden state even though the product-facing name is `zazzles`
+- finer-grained naming and directory contracts should be treated as feature-level requirements rather than proposal-level detail
 
 ## Risks and Mitigations
 
@@ -548,7 +557,7 @@ Capabilities:
 - detect when the configured remote integration branch has advanced
 - mark affected worktrees as stale relative to that remote base
 - support graph-wide or subtree refresh against the configured remote base
-- expose a `worktree list` or `status` view that shows freshness relative to both parent and remote integration branch
+- expose a `zaz list` or `zaz status` view that shows freshness relative to both parent and remote integration branch
 - update branch and PR state after a successful sync
 
 Why it matters:
@@ -652,7 +661,7 @@ Explicit non-goal for the first release:
 
 Likely bootstrap flows the product should support:
 
-- initialize a new repo container in the opinionated layout
+- initialize a new repo container in the opinionated layout, with `zaz init <repo-name>` creating a container directory whose name matches the repo name
 - inspect an existing repo and report whether it can be adopted as-is
 - guide the user through missing requirements such as Git auth, remote setup, or unsupported worktree topology
 
@@ -882,8 +891,6 @@ This should not be positioned as a GitButler clone. It should be positioned as a
 
 ## Open Questions
 
-- What should the product be named?
-- Should the local metadata live in a hidden repo folder, a managed app folder, or both?
 - Should branch names remain user-controlled while worktree folder names are sanitized and tool-managed?
 - Do we want webhook support, polling, or both for GitHub state changes?
 - How much of PR review should happen in the desktop app versus remaining in GitHub?
