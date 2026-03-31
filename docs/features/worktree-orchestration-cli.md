@@ -24,11 +24,11 @@
 
 ## Feature Summary
 
-The zazzles Worktree Orchestration CLI is the primary execution surface for managing local worktree graphs, contributor workflows (commit, push, PR), parent-relative PR workflows, automated propagation, and agent-friendly orchestration on a single machine.
+The zazzles Worktree Orchestration CLI is the primary execution surface for managing standalone worktrees, stacked worktree graphs, contributor workflows, parent-relative PR workflows, automated propagation, and agent-friendly orchestration on a single machine.
 
 This feature exists so humans and agents can operate the product without depending on a desktop UI. It is the foundational user-facing capability that proves the product model before richer visualization and review experiences are layered on top.
 
-At its core, the CLI exists to manage the chaos of out-of-order PR review and merge by keeping the local worktree graph coherent and by applying automation plus AI assistance to the propagation and conflict work that follows.
+At its core, the CLI exists to manage two workflow categories in one product: standalone worktrees, and stacked worktrees whose shape may be linear or DAG-like. It keeps those worktrees coherent as local dependencies change and as the shared remote integration branch moves underneath them.
 
 Over time, this feature should support multiple user journeys rather than only one bootstrap path:
 
@@ -178,10 +178,37 @@ sequenceDiagram
     CLI->>GIT: fetch remote integration branch
     GIT->>CLI: report new integration-base commit
     CLI->>DAG: mark affected nodes stale
-    CLI->>WT: refresh all affected worktrees against remote base
-    CLI->>DAG: update freshness and operational ancestry state
-    CLI->>CLI: report which nodes are current, conflicted, or blocked
+    CLI->>WT: refresh all eligible worktrees against remote base
+    CLI->>DAG: update freshness, deferred-refresh, and operational ancestry state
+    CLI->>CLI: report which nodes are current, conflicted, blocked, or deferred
 ```
+
+### Standalone vs Stacked Shapes
+
+```mermaid
+flowchart TD
+    M["main / integration branch"] --> S["feature-name-0<br/>standalone worktree"]
+    M --> R["deliverable-name-0<br/>stack root"]
+    R --> L1["deliverable-name-1"]
+    L1 --> L2["deliverable-name-2"]
+    L2 --> L3["deliverable-name-3"]
+    L2 --> D21["deliverable-name-2-1"]
+    D21 --> D211["deliverable-name-2-1-1"]
+    L2 --> D22["deliverable-name-2-2"]
+    D22 --> D221["deliverable-name-2-2-1"]
+    L2 --> D23["deliverable-name-2-3"]
+    D23 --> D231["deliverable-name-2-3-1"]
+    D211 --> C["deliverable-name-3<br/>convergence node"]
+    D221 --> C
+    D231 --> C
+```
+
+CLI interpretation:
+
+- `feature-name-0` is a standalone worktree that only tracks integration-branch drift
+- `deliverable-name-0` is the root of a stacked workflow
+- stacked descendants may be linear or branch into a DAG shape from the same root
+- the convergence node should remain blocked until all required upstream paths are ready
 
 ## Why This Feature Matters
 
@@ -190,7 +217,7 @@ sequenceDiagram
 - A CLI-first path lets the team validate worktree creation, PR lifecycle, propagation, and conflict behavior early.
 - The CLI can be dogfooded while the product itself is being built.
 - The desktop application can later become a companion feature built on top of a trusted engine and CLI workflow.
-- The CLI is the first place where the product proves it can absorb unpredictable PR timing and keep downstream work moving anyway.
+- The CLI is the first place where the product proves it can handle normal rebases, ordered stacks, DAG sequencing, and team-driven integration-branch drift without making the user babysit every worktree manually.
 
 ## Current State
 
@@ -213,12 +240,14 @@ What is not live yet:
 This feature is successful when:
 
 - a human or agent can operate the core product entirely through the CLI
-- the CLI can create and manage the local worktree DAG on one machine
+- the CLI can create and manage standalone worktrees and stacked worktrees on one machine
 - the CLI can open and track parent-relative draft or ready-for-review PRs
 - merged or updated upstream branches propagate forward through downstream branches with minimal manual work
+- standalone worktrees can be refreshed safely when the shared integration branch advances
 - AI-assisted conflict handling is available when propagation is not clean
 - the CLI remains the authoritative automation surface even after the desktop application ships
 - the CLI reliably handles out-of-order review and merge events without forcing humans to manually babysit the graph
+- the CLI reliably enforces dependency-aware merge order and tracks deferred refresh work without forcing humans to manually babysit the graph
 - core bootstrap and GitHub-host operations required by this feature can run without depending on the external `gh` binary once M2 is complete
 - users can switch between multiple GitHub accounts and PAT-backed profiles without ad hoc shell reconfiguration
 - profile defaults can be associated to directory scopes so repo roots under a given path resolve to the intended identity by default
@@ -227,30 +256,37 @@ This feature is successful when:
 
 ## Core Concepts
 
+Terminology note:
+
+- `standalone worktree` means a worktree that does not participate in a local stack
+- `stacked worktree` means a worktree that participates in a linear stack or DAG stack
+
 ### Worktree node
 
 A managed unit consisting of:
 
 - a branch
 - a local worktree path
+- a workflow category and optional stack shape
 - local DAG metadata
 - optional PR state
 - optional agent ownership state
 
-The node identity must not depend on a numeric suffix in the branch or worktree name. Human-meaningful names are preferred, and the DAG metadata remains the source of truth for dependency relationships.
+The node identity should not depend on a numeric suffix or implied merge order in the branch or worktree name. Human-meaningful, stable names are preferred so worktree directories and branches stay understandable even if sequencing guidance changes later.
 
-### Managed stack suffixes
+### Workflow category and stack shape
 
-For stacked branch lineages, the CLI should apply a managed numeric suffix convention without making that suffix the semantic source of truth.
+Each managed worktree should declare whether it is:
 
-Rules:
+- a standalone worktree
+- part of a stacked workflow
 
-- the user may create the first branch in a line with any descriptive unsuffixed name
-- the CLI should not require an initial `-0` suffix
-- when the user creates the first stacked child from an unsuffixed managed branch, the CLI should rename the existing branch and worktree to `-1` and create the new child as `-2`
-- when the user extends an already suffixed stacked line, the CLI should assign the next sequential suffix in that line
-- if the parent branch has already been pushed and remote lifecycle management is active, the CLI must push the renamed branch first, confirm the new remote ref exists, and only then delete the old remote branch name as part of cleanup
-- these suffixes are a user-facing lineage aid only; the actual DAG in `.zazz/` remains authoritative for dependency truth, merge handling, and convergence behavior
+If it is part of a stacked workflow, the stack should also record whether the current shape is:
+
+- linear
+- DAG-capable
+
+This matters because the CLI should apply different sequencing and enforcement expectations depending on the workflow category and stack shape.
 
 ### Parent source
 
@@ -419,16 +455,88 @@ Credential storage and execution requirements:
 - the CLI should provide an explicit non-interactive auth handoff path for agents running in sandboxes that do not inherit the caller's shell environment
 - agent handoff should materialize credentials ephemerally for command execution, with redaction-safe logs and no plaintext persistence in repo-local files
 
-### Graph-aware merge order
+### Dependency-aware merge order
 
-The rule that creation order does not guarantee review or merge order. The CLI must follow actual dependency relationships and current merged state, not assume that lower-numbered or earlier-created nodes always complete first.
+The CLI must distinguish between:
 
-In practice, this works like a normal human team:
+- standalone worktrees, where merge order is not constrained by a local stack but refresh against the integration branch still matters
+- linear stacked workflows, where merge order must follow the declared stack sequence from earliest to latest
+- DAG stacks, where merge eligibility is determined by the actual dependency graph and current readiness state
 
-- whichever PR gets reviewed and merged first may simply be the one that got attention first
-- the CLI must therefore treat out-of-order merge completion as routine and automatically drive the required downstream refresh behavior
+For both linear stacks and DAG stacks, the CLI should maintain explicit sequencing metadata. PR titles are the preferred user-facing place to surface required approval and merge order because they can be updated more easily than branch names, while repo-local state should remain the durable machine-readable source of truth.
 
-This is the main operational value of the feature, not just an edge case to support.
+This is one of the main operational values of the feature, not just an edge case to support.
+
+### Merge-order signaling and enforcement
+
+The product should separate:
+
+- stable branch and worktree naming for local usability
+- PR-title signaling for human-visible merge order
+- repo-local metadata for durable sequencing truth
+
+The CLI should aim to support an enforcement mechanism rather than leaving stack order as a suggestion only.
+
+Potential enforcement layers:
+
+- CLI preflight checks that refuse a merge-preparation or sync command when prerequisites are not satisfied
+- GitHub status checks that mark a PR blocked when earlier required stack items are not yet merged or refreshed
+- branch-protection-compatible required checks so order enforcement can participate in the normal GitHub merge flow
+
+### Stack coordinate
+
+For stack-capable workflows, the CLI should default to a hierarchical stack coordinate such as:
+
+- `0`
+- `1`
+- `2`
+- `2-1`
+- `2-1-1`
+- `2-2`
+
+This coordinate can be mirrored into branch or worktree naming as a suffix such as `oauth-flow-0` or `oauth-flow-2-1`, but it should not be the only source of truth for sequencing.
+
+Recommended convention:
+
+- every new feature or deliverable worktree starts at `-0`
+- if it later becomes part of a deeper stack, descendants use `-1`, `-2`, `-2-1`, and so on
+- a worktree may remain at `-0` forever if it never grows into a deeper stack
+
+The durable source of truth should remain repo-local stack metadata, with PR titles surfacing the current required order for humans.
+
+### Stack lead limit
+
+The CLI should support a guardrail for how far ahead stacked work is allowed to get beyond the last trusted upstream checkpoint.
+
+Recommended meaning:
+
+- the maximum speculative downstream depth allowed before the tool warns or blocks creation of another stacked worktree
+
+The guardrail should exist because:
+
+- small upstream feedback may be easy to propagate
+- major review feedback may invalidate every descendant beyond that point
+- agents should not run arbitrarily far ahead without an explicit policy
+
+Possible CLI behavior:
+
+- show current speculative depth in status output
+- warn when a new stacked node would exceed the configured limit
+- optionally block creation unless a human override is supplied
+- allow per-repo configuration because acceptable speculative depth varies by team
+
+### Active development state
+
+The CLI should track whether a worktree appears to be under active human or agent development so automated refresh does not interrupt in-progress work.
+
+Likely signals may include:
+
+- uncommitted tracked changes
+- an active agent lease or owner assignment
+- a currently running sync-sensitive operation
+- an explicit user pause or hold state
+
+When a refresh is deferred, the CLI should record that decision durably and surface that the worktree is pending refresh.
 
 ### Draft PR checkpoint
 
@@ -471,11 +579,18 @@ Important adoption constraint:
 
 Important flow nuance:
 
-- node creation order does not guarantee PR completion order
-- smaller downstream branches may be reviewed and merged before larger earlier-created branches
-- the CLI must therefore compute propagation from the actual dependency graph and current branch state, not from naming sequence alone
+- standalone worktrees may have no local dependency chain but still need managed refresh against the shared integration branch
+- strict stacks need explicit sequence enforcement from earliest branch to latest branch
+- DAG workflows must compute what can merge next from the actual dependency graph and current branch state, not from naming sequence alone
 - when merge order changes the effective branch ancestry, the CLI must be able to refresh or reshape the active operational graph without losing track of the original work intent
 - the CLI must also account for remote branch movement caused by other developers working in the same repository
+- automated refresh should skip actively developed worktrees, but those skips must remain visible until resolved
+
+Convergence requirement:
+
+- when a stacked workflow fans out into multiple parallel branches and later returns to one downstream node, the CLI must treat that downstream node as blocked until all required parent branches are ready
+- this should be surfaced as explicit status, not left for the user to infer from branch names or graph shape alone
+- a convergence node is therefore a real dependency gate, not just a visual convenience in the DAG
 
 ### Status and worktree list flow
 
@@ -486,6 +601,10 @@ The CLI should provide a `list` or `status` style command that shows, for each m
 - PR state when present
 - whether it is current relative to its parent
 - whether it is stale relative to the configured remote integration branch
+- whether automated refresh is currently deferred because the worktree appears active
+- what PR-ordering or sequencing signal applies to it
+- what stack coordinate it has when applicable
+- whether it exceeds or is approaching the configured stack lead limit
 - whether it needs refresh, conflict resolution, or migration
 
 This status view should include both:
@@ -794,9 +913,9 @@ Milestones should sequence, constrain, and deepen these capability sections. The
 
 | Milestone | Status | Outcome |
 | --- | --- | --- |
-| M1 | Proposed | First fully useful CLI milestone covering greenfield bootstrap and the core local orchestration path across `C1`-`C5` |
+| M1 | Proposed | First fully useful CLI milestone covering greenfield bootstrap, workflow classification, deferred-refresh bookkeeping, and the core local orchestration path across `C1`-`C5` |
 | M2 | Proposed | Native provider and multi-account milestone covering the host/auth parts of `C1` and all of `C6` |
-| M3 | Proposed | Collaboration and adoption milestone covering existing-layout adoption, `C4`, `C5`, `C7`, and advanced maintenance inside `C2` |
+| M3 | Proposed | Collaboration and adoption milestone covering existing-layout adoption, PR lifecycle, deeper propagation, merge-order handling, and advanced maintenance across `C1`, `C2`, `C4`, `C5`, and `C7` |
 
 ## Milestone Details
 
@@ -816,6 +935,7 @@ Scope constraints:
 - M1 should establish the public `zaz` surface clearly enough that `zaz --help` is already a stable entry point
 - M1 should stay greenfield-first for `C1`: `zaz init` remains fresh-bootstrap only in this milestone
 - M1 should establish machine-readable output and durable `.zazz/` state across the covered capability sections
+- M1 should support standalone and stacked workflow categories clearly enough that deferred refresh and merge-order reasoning do not need to be inferred informally
 
 Primary companion docs for this milestone:
 
@@ -868,6 +988,21 @@ Primary companion docs for this milestone:
 - `docs/features/worktree-orchestration-cli/contribution-lifecycle.md`
 - `docs/features/worktree-orchestration-cli/add.md`
 
+#### M2-D2: Stack sequencing and merge-order enforcement
+
+Focus:
+
+- PR title formatting or update rules for stacked workflows
+- repo-local sequencing metadata as the durable source of truth
+- merge-readiness calculation for linear stacks and DAG stacks
+- GitHub status checks or similar enforcement integration
+- stack-coordinate handling and stack lead limit guardrails
+
+Likely user-visible outcome:
+
+- users can see the required review and merge order clearly, and blocked PRs cannot be merged as if the stack order were merely advisory
+- users can see when a stack has gone too far ahead of trusted upstream reality
+
 ## Current State Summary
 
 The feature is currently proposed only. No milestones have shipped yet.
@@ -878,6 +1013,7 @@ The feature is currently proposed only. No milestones have shipped yet.
 - adoption of an already-existing compatible `.bare` repo-container should become a priority before desktop UX so teams with established worktree conventions can onboard incrementally
 - PR lifecycle automation should follow after native provider and profile capabilities are in place
 - parent-to-child propagation after local PR merge should land in a later milestone after origin-refresh behavior is stable
+- PR lifecycle automation, stack-order signaling, and merge enforcement should become the next milestone after origin-refresh, deferred-refresh bookkeeping, and conflict-handoff behavior are stable
 - desktop visualization and review should build on top of this feature rather than replacing it
 - a later desktop/client milestone should support reviewing untracked files in the current worktree against the integration worktree and help the user accept selected updates back into that integration-worktree source of truth
 - future multi-machine or multi-user coordination may extend this feature, but that is out of MVP scope
@@ -892,6 +1028,7 @@ Risks:
 - AI-assisted conflict resolution must be observable and reviewable to maintain trust
 - the distinction between intended work structure and current branch ancestry can become confusing if the CLI does not represent it clearly
 - repo-local conflict artifacts must remain clean and discoverable or they will become their own source of chaos
+- active-development detection may produce false positives or false negatives if the CLI relies on weak heuristics
 
 Constraints:
 
@@ -901,6 +1038,7 @@ Constraints:
 - existing-layout adoption should only support compatible bare-repo container shapes, not arbitrary historical repo directories
 - branch and worktree names should be descriptive, with CLI-managed `-1`, `-2`, and later suffixes used for stacked lineage only and never as dependency truth
 - newly created worktrees should be made usable without forcing the user to manually recopy common untracked files every time
+- branch and worktree names should stay stable enough for local usability, while stacked-workflow sequencing should live in PR titles plus repo-local metadata
 
 Non-goals:
 
@@ -913,6 +1051,11 @@ Non-goals:
 - how strict should compatible-layout detection be for adopting an existing `.bare` plus sibling-worktree repo container?
 - which parts of graph state can be inferred safely during adoption, and which should require explicit user confirmation?
 - should propagation run only on clean working states, or can the CLI safely manage dirty worktrees?
+- which signals should count as "active development" for automatic refresh deferral?
+- how should standalone worktrees and stacked workflows be represented in the public CLI without making the model too abstract?
+- which enforcement mechanism should be canonical for stack order: CLI checks, GitHub status checks, branch protection integration, or some combination?
+- should every new worktree default to `-0`, or should the suffix appear only once a worktree actually enters a deeper stack?
+- how should the `stack lead limit` be defined: by depth from the last merge, by depth from the last approval checkpoint, or both?
 - how much AI context should be included by default during conflict resolution?
 - should intended work dependencies and current operational ancestry be stored as separate graph layers in `.zazz/`, or derived from a single richer model?
 - should untracked files be copied, symlinked, or managed by a per-repo materialization strategy depending on file type?

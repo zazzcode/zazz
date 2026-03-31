@@ -2,6 +2,23 @@
 
 This repository uses the Zazz framework for durable product docs, repo standards, and worktree-oriented execution.
 
+## Agent Directive Callout Standard
+
+Use this callout format across project docs when an instruction is specifically for agents and must be treated as normative:
+
+`⚠️ Agent Directive ⚠️`
+
+Definition:
+
+- `⚠️ Agent Directive ⚠️` marks binding agent-facing instructions.
+- Requirement levels in Agent Directive lines use uppercase keywords: `MUST`, `MUST NOT`, `SHOULD`, `SHOULD NOT`, `MAY`.
+- If a conflict exists, Agent Directive lines take precedence over nearby non-directive guidance in the same document.
+
+Examples:
+
+- `⚠️ Agent Directive ⚠️ MUST NOT: If instructions are unclear or conflicting, do not guess; ask for clarification.`
+- `⚠️ Agent Directive ⚠️ MUST NOT: When addressing PR feedback, do not modify files outside the PR's changed files unless explicitly instructed.`
+
 ## Docs Root
 
 `Framework docs root: docs`
@@ -64,7 +81,8 @@ Project-specific worktree rules for this repo:
 - `main` is the integration branch.
 - Use one active feature, deliverable, or proposal branch per worktree.
 - Prefer flat branch names with hyphens instead of `/` when working inside this repo.
-- Branch from `main` unless a different base is explicitly required.
+- For a new development branch, branch from the synced local `main`.
+- For PR review or continuing existing work, create the worktree from the existing remote branch instead of branching from local `main`.
 - Merge through PR review rather than local integration merges.
 
 ## Repo Orientation
