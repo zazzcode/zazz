@@ -79,6 +79,8 @@ Shared-file coordination:
 Project-specific worktree rules for this repo:
 
 - `main` is the integration branch.
+- ⚠️ Agent Directive ⚠️ MUST NOT: Make code, docs, or config edits directly in the integration worktree (typically `main`).
+- ⚠️ Agent Directive ⚠️ MUST: Perform implementation and documentation edits in a non-integration feature worktree, then merge via PR.
 - Use one active feature, deliverable, or proposal branch per worktree.
 - Prefer flat branch names with hyphens instead of `/` when working inside this repo.
 - For a new development branch, branch from the synced local `main`.

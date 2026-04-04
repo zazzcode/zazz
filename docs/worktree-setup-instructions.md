@@ -377,6 +377,9 @@ The full smoke-test contract for the overnight implementation run is defined in:
 
 ## 8. Day-To-Day Usage
 
+⚠️ Agent Directive ⚠️ MUST NOT: Make code, docs, or config edits directly in the integration worktree (typically `main`).
+⚠️ Agent Directive ⚠️ MUST: Perform implementation and documentation edits in a non-integration feature worktree, then merge via PR.
+
 - Do coding in feature worktrees only.
 - Keep the integration worktree synced from remote and clean.
 - Open PRs from feature branches into the configured integration branch.
